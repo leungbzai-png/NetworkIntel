@@ -1,5 +1,6 @@
 # NetworkIntel 本地离线IP情报平台
 
+> **当前版本：v0.1.0**（首个公开规范化版本）
 > 离线查IP，全可视化界面，Windows原生部署，无需Docker
 
 ---
@@ -201,11 +202,13 @@ GeoLite2 提供免费的城市级地理位置数据，需要注册账号获取 L
 geoip:
   license_key: "YOUR_MAXMIND_LICENSE_KEY_HERE"
 ```
-替换为你的 Key：
+替换为你的 Key（下面是占位示意，请填你自己的真实 Key）：
 ```yaml
 geoip:
-  license_key: "AbCdEfGhIjKlMnOp"
+  license_key: "<在此粘贴你的_MaxMind_License_Key>"
 ```
+> 推荐做法：不要把真实 Key 写进 `sources.yaml`，而是写进 `.env` 的 `MAXMIND_LICENSE_KEY=`，
+> `sources.yaml` 用 `${MAXMIND_LICENSE_KEY}` 引用（见「配置方式」）。
 
 ---
 
@@ -476,13 +479,56 @@ key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存
 
 ---
 
+## 哪些文件不会上传 GitHub
+
+为保护隐私与控制仓库体积，以下内容**不随源码发布**（已在 `.gitignore`）：
+
+| 类型 | 路径 |
+|---|---|
+| 真实密钥 | `.env`、`.env.*`（保留 `.env.example`） |
+| 真实配置 | `configs/sources.yaml`、`configs/*.local.yaml`（保留 `sources.example.yaml`） |
+| 数据库 | `live/*.db`、`*.db` / `*.sqlite` / `*.sqlite3`（含 WAL/SHM） |
+| 缓存/快照/备份 | `cache/`、`snapshots/`、`gdrive_sync/`、`backups/` |
+| 日志/报告 | `logs/`、`reports/`、`*.log` |
+| 构建产物 | `dist/`、`build/`、`*.spec`（**exe 不随源码发布**） |
+| 本地工具配置 | `.claude/settings.local.json`、`.vscode/`、`.idea/` |
+
+> 克隆源码后需自行 `copy .env.example .env`、`copy configs\sources.example.yaml configs\sources.yaml`，
+> 填入自己的 key，并运行 `update.bat` 下载数据。**数据库与 key 都不在仓库里。**
+
+---
+
 ## 安全注意事项
 
 - **绝不提交**：`.env`、`configs/sources.yaml`、`cache/`、`logs/`、`reports/`、`snapshots/`、
-  `backups/`、`live/*.db`（均已在 `.gitignore`）。
+  `backups/`、`live/*.db`、exe / 构建产物（均已在 `.gitignore`）。
 - 真实 key 只写 `.env`；模板文件（`*.example.*`）只放占位符。
 - 提交前用 `git status` / `git diff` 自检，确认无真实 key、无大数据库文件。
 - 详见 [`SECURITY.md`](SECURITY.md) 与 [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)。
+
+---
+
+## 已知限制（v0.1.0）
+
+- **数据库不随源码发布**：克隆后需自行运行 `update.bat` 首次联网下载（之后查询全程离线）。
+- **API key 需用户自行配置**：在线 Provider（ipinfo / ip2location / AbuseIPDB）需在 `.env` 填入各自 key；
+  离线查询本身不需要任何在线 key（仅 GeoIP 下载需 MaxMind Key）。
+- **SQLite 并发写入风险已审计但 v0.1.0 未修复**：GUI/调度器「全部更新」会并发写库，可能偶发
+  `database is locked`（随机源 status=error）。**规避：改用 `update.bat`（串行更新）**。
+  详见 [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)，修复列入后续路线。
+- **在线 Provider 不接入 `query_ip` 主流程**：在线能力仅旁路，离线主查询不依赖任何外部网络。
+
+---
+
+## 后续路线
+
+当前公开版本 **v0.1.0**。后续规划（轻量、可能调整，见 [`ROADMAP.md`](ROADMAP.md)）：
+
+- **v0.2.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）
+- **v0.3.0** SQLite 写入串行化（busy_timeout → 写锁/队列 → 事务原子化）
+- **v0.4.0** GUI 优化（审计后）
+- **v0.5.0** 发布包 / 数据分离
+- **v1.0.0** 稳定版
 
 ---
 
@@ -517,4 +563,4 @@ python scripts/provider_smoke_test.py --rate-limit-status
 
 ---
 
-*NetworkIntel v1.0 · 数据仅供参考，不构成任何安全建议*
+*NetworkIntel v0.1.0 · 数据仅供参考，不构成任何安全建议*

@@ -36,7 +36,7 @@
 | 缓存 | `cache/` |
 | 快照 | `snapshots/`、`gdrive_sync/` |
 | 备份 | `backups/` |
-| 日志 | `logs/` |
+| 日志 | `logs/`、`*.log` |
 | 报告 | `reports/` |
 | 构建产物 | `dist/`、`dist_backup*/`、`build/`、`*.spec` |
 | 本地密钥 | `.env`、`.env.*`、`configs/sources.yaml`、`configs/*.local.yaml` |

@@ -1,64 +1,50 @@
 # 变更记录（CHANGELOG.md）
 
-> 项目**工程化/规范化**轨道的变更记录（与 `python/CHANGELOG.md` 的 GUI 功能记录互补）。
-> 遵循语义化版本，最新在上。
+> 项目**工程化/发布**轨道的变更记录（与 `python/CHANGELOG.md` 的 GUI 功能记录互补，二者版本轴独立）。
+> 遵循语义化版本，最新在上。后续版本规划见 [`ROADMAP.md`](ROADMAP.md)。
 
 ---
 
-## [v0.4.0] - 2026-06-11 — 缓存 / 限速 / AbuseIPDB / 文档收尾 / 并发审计
+## [v0.1.0] - 2026-06-11 — 首个公开规范化版本
 
-### Added
-- **AbuseIPDB 在线 Provider**（旁路）：真实 `query()`（认证头 `Key:`，key 不进 URL/日志/异常/缓存）；
-  统一字段（abuse_confidence_score/severity/threats/...）；severity 分级 `0 clean / 1-24 low / 25-74 medium / 75-100 high`。
-- **限速护栏增强**：per-provider `per_minute/per_hour/per_day`；**连续 429 熔断**（`max_consecutive_429` + `circuit_breaker_seconds`）；
-  `DEFAULT_PROVIDER_LIMITS`（AbuseIPDB 10/100/900，免费额度留余量）；`build_default_limiter`、`reset()`、`in_circuit()`。
-- **online_runner 增强**：执行顺序调整为 validate→缓存→限速/熔断→query；缓存命中**零额度消耗**；
-  `force_refresh` 仍受限速；熔断期返回 `circuit_open` 且不调用 `query()`。
-- **smoke 脚本**：`--rate-limit-status` / `--simulate-429` / `--reset-rate-limit` / `--provider abuseipdb`（均默认不联网）。
-- **项目文档体系**：`DEVELOPMENT.md`、`ROADMAP.md`、`PROJECT_STATUS.md`、`RELEASE_CHECKLIST.md`、`CLAUDE_HANDOFF.md`、根 `CHANGELOG.md`；README 增项目定位/启动/配置/安全/测试。
-- **SQLite 并发写入审计**：`docs/SQLITE_CONCURRENCY_AUDIT.md` + `docs/SQLITE_CONCURRENCY_TODO.md`（**只审计、未改源码**）。
+NetworkIntel 的**首个公开发布版本**。把此前的内部开发阶段（脚手架 / 安全整改 / Provider /
+缓存限速 / AbuseIPDB / 文档 / 并发审计）一次性整合、去敏、版本化为 v0.1.0。
 
-### Changed
-- 测试体系扩充至 **76** 用例（新增 `test_abuseipdb_provider.py`，扩充 ratelimit/runner/templates），默认零网络、零真实 key。
-- `.env.example` / `configs/sources.example.yaml`：补全 AbuseIPDB 限速/TTL 与全局熔断占位。
+### 离线主功能（基线）
+- 17 个下载型数据源（GeoIP / ASN / RPKI / RIR / 云 IP 段 / Tor / VPN / 威胁情报 / WHOIS）落库 `live/intel.db`。
+- `query_ip` 只读离线查询 + 风险自动分级；TUI、PySide6 GUI、可运行 exe；`start.bat` / `update.bat` 等入口。
 
----
+### 安全规范化
+- `git init` + `.gitignore` 加固（忽略 `.env` / `sources.yaml` / `live` / `cache` / `logs` / `reports` /
+  `snapshots` / `backups` / `dist` / `build` / `*.log` / `.claude/settings.local.json`）。
+- 密钥迁移至 `.env`；`configs/sources.yaml` 改 `${VAR}` 引用；真实密钥移出版本库（仅留 `*.example.*` 占位符）。
+- `config_loader` 支持 `.env` 加载与 `${VAR}` 解析（不覆盖已有环境变量）；`SECURITY.md`。
 
-## [v0.3.0] - 2026-06 — Provider 规范与在线旁路 Provider
+### Provider 架构与在线旁路
+- 统一 Provider 抽象 `providers/{types,base,registry}`，兼容适配旧 17 源（不实例化、不读配置）。
+- HTTP 工具层 `providers/http.py`（timeout / 重试 / 退避 / 统一失败对象，不记录 headers / key）。
+- 在线旁路 Provider：**BGPView**（无 key）、**ipinfo**、**ip2location**、**AbuseIPDB**（均需 key 者缺 key 优雅失败）。
+- ThreatFox 暂为骨架。**所有在线 Provider 未接入 `query_ip`，仅显式旁路调用。**
 
-### Added
-- **统一 Provider 抽象**：`providers/{types,base,registry}`，兼容适配旧 17 个下载源（不实例化、不读配置）。
-- **HTTP 工具层** `providers/http.py`：timeout / UA / 429·5xx 重试 / 退避 / JSON / 统一失败对象（不记录 headers）。
-- **在线旁路 Provider**：BGPView（无 key）、ipinfo（`Authorization: Bearer`）、ip2location（key 经 params）真实实现。
-- **在线缓存** `providers/cache.py`：独立 `cache/online_cache.sqlite`，不碰 `intel.db`。
-- **限速基础** `providers/ratelimit.py` + **旁路执行器** `providers/online_runner.py`。
-- 文档：`docs/API_PROVIDER_*`、`ONLINE_PROVIDERS.md`、`ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`、`TESTING.md`。
+### 缓存 / 限速 / 熔断
+- 在线结果缓存 `providers/cache.py`（独立 `cache/online_cache.sqlite`，不碰 `intel.db`）。
+- per-provider 限速（分/时/日）+ 连续 429 熔断 `providers/ratelimit.py`；旁路执行器 `providers/online_runner.py`。
+- AbuseIPDB 默认 `per_day=900`（免费额度留余量），威胁类缓存 TTL 默认 6h。缓存命中不消耗限额；`force_refresh` 仍受限速。
 
-### Notes
-- 所有在线 Provider **未接入** `query_ip`，仅显式旁路调用。
+### 测试与文档
+- 测试体系 **76 / 76 passed**（默认零网络，零真实 key 输出）。
+- 文档：`README` / `DEVELOPMENT` / `ROADMAP` / `PROJECT_STATUS` / `RELEASE_CHECKLIST` / `CLAUDE_HANDOFF` /
+  `CONTRIBUTING` / `docs/RELEASE_NOTES_v0.1.0` + `docs/*`（在线 Provider / 缓存限速 / 测试）。
+- **SQLite 并发写入审计**：`docs/SQLITE_CONCURRENCY_AUDIT.md` + `docs/SQLITE_CONCURRENCY_TODO.md`（**仅审计，未改源码**）。
 
----
+### 发布工程
+- `VERSION` = `0.1.0`；`python/__init__.py` `__version__ = "0.1.0"`（GUI `APP_VERSION` 独立保留 1.2.0）。
+- MIT `LICENSE`（NetworkIntel Contributors）；最小 GitHub Actions 测试 workflow（`.github/workflows/tests.yml`）。
 
-## [v0.2.0] - 2026-06 — Git / 密钥 / 安全配置规范化（P0 安全整改）
-
-### Added
-- `git init` + `.gitignore`（忽略 `.env` / `sources.yaml` / `live` / `cache` / `logs` / `reports` / `snapshots` / `backups`）。
-- `.env` 密钥管理 + `.env.example` 模板；`SECURITY.md`。
-
-### Changed
-- `configs/sources.yaml` 中密钥改为 `${VAR}` 引用，真实密钥移出版本库（仅留 `*.example.*` 占位符）。
-- `config_loader` 支持 `.env` 加载与 `${VAR}` 解析（不覆盖已有环境变量）。
-
-### Security
-- 真实 API key 从被跟踪文件中清除；配置加载测试断言模板无明文长 token。
+### 未包含（不随源码发布）
+- 数据库文件、API key、缓存、日志、报告、快照、备份、exe / 构建产物（均 gitignore）。
 
 ---
 
-## [v0.1.0] - 2026-06（基线） — 现有离线查询可运行
-
-### Added
-- 17 个下载型数据源（GeoIP/ASN/RPKI/RIR/云/Tor/VPN/威胁情报/WHOIS）落库 `live/intel.db`。
-- `query_ip` 只读离线查询 + 风险自动分级；TUI 与 PySide6 GUI。
-- `start.bat` / `update.bat` / `status.bat` 等 Windows 原生入口。
-
-> GUI 细节变更见 `python/CHANGELOG.md`。
+> v0.1.0 之前没有公开发布；早期内部阶段已合并入本版本。
+> GUI 界面自有版本（v1.0→v1.2）记录见 `python/CHANGELOG.md`。

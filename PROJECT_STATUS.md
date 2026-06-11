@@ -1,6 +1,6 @@
 # 项目状态（PROJECT_STATUS.md）
 
-> 快照日期：**2026-06-11** · 版本进度：**v0.4.0 完成**（见 [`ROADMAP.md`](ROADMAP.md)）。
+> 快照日期：**2026-06-11** · 当前版本：**v0.1.0 public-ready**（首个公开规范化版本，见 [`ROADMAP.md`](ROADMAP.md)）。
 
 ---
 
@@ -51,7 +51,7 @@ bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 
 ## 5. 未接入主查询的内容
 
 - **全部在线 Provider**（bgpview/ipinfo/ip2location/abuseipdb/threatfox）—— 仅旁路，未进 `query_ip`。
-- **online enrichment** —— 规划中（v0.5.0），将以独立 `enrich()` 模块、可选、可关闭方式接入，**不改 `query_ip` 内部**。
+- **online enrichment** —— 规划中（v0.2.0），将以独立 `enrich()` 模块、可选、可关闭方式接入，**不改 `query_ip` 内部**。
 
 ---
 
@@ -72,8 +72,8 @@ bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 
 
 ## 7. 下一步优先级
 
-1. **v0.6.0 SQLite 写入串行化**（审计已就绪）：busy_timeout(P0) → 写锁/writer 队列(P1) → 事务原子化(P2)。
-2. **v0.5.0 可选 online enrichment**：独立 `enrich()`，可关闭，不动 `query_ip`。
+1. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout(P0) → 写锁/writer 队列(P1) → 事务原子化(P2)。
+2. **v0.2.0 可选 online enrichment**：独立 `enrich()`，可关闭，不动 `query_ip`。
 3. 补齐 ThreatFox 真实实现（旁路）。
 4. 发布前过 `RELEASE_CHECKLIST.md`。
 
@@ -93,4 +93,4 @@ bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 
 - 离线主路径稳定、隔离良好；在线能力以受控旁路引入，可随时关闭。
 - 有 76 个零网络测试、完整文档体系与明确红线（`CLAUDE_HANDOFF.md`），接手成本低。
 - 已知最大风险（并发写库）**已审计、有可回滚的分步方案**，未被掩盖。
-- 待办清晰、版本规划明确。**唯一需在接入更高并发/正式发布前先落地的是 v0.6.0 写入串行化。**
+- 待办清晰、版本规划明确。**唯一需在接入更高并发/正式发布前先落地的是 v0.3.0 写入串行化。**
