@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | `bgpview` | ASN/BGP | 否 | ✅ 已实现 query() | — |
 | `ipinfo` | GeoIP/ASN | 是 | ✅ 已实现 query()（带 token） | `IPINFO_TOKEN` |
-| `ip2location` | GeoIP | 是 | 🧩 骨架 | `IP2LOCATION_API_KEY` |
+| `ip2location` | GeoIP | 是 | ✅ 已实现 query()（带 key） | `IP2LOCATION_API_KEY` |
 | `abuseipdb` | 威胁情报 | 是 | 🧩 骨架 | `ABUSEIPDB_API_KEY` |
 | `threatfox` | 威胁情报 | 是 | 🧩 骨架 | `THREATFOX_API_KEY` |
 
@@ -18,7 +18,7 @@
 
 ### 旁路执行器（缓存 + 限速，已落地）
 - `python/providers/online_runner.py::run_provider(name, ip, force_refresh=False, use_cache=True)`
-- 顺序：允许列表（默认 `bgpview`/`ipinfo`）→ `validate_config()` → 限速 `can_call()` → 查缓存 → 未命中才 `query()` → 写缓存。
+- 顺序：允许列表（默认 `bgpview`/`ipinfo`/`ip2location`）→ `validate_config()` → 限速 `can_call()` → 查缓存 → 未命中才 `query()` → 写缓存。
 - 缓存：独立 `cache/online_cache.sqlite`（不碰 `intel.db`）；限速：`cache/online_ratelimit.json`，429 进入冷却。
 - **仍未接入 `query_ip`**：只能显式调用或经 smoke 脚本。
 - 清理缓存：`python scripts/provider_smoke_test.py --purge-cache` / `--cache-stats`。
@@ -28,6 +28,24 @@
 - 手动测试：`python scripts/provider_smoke_test.py --provider ipinfo --query 8.8.8.8`
   - 未配置 token 时**优雅提示缺 key**，不发请求、不打印 token、不崩溃。
 - 统一输出字段：`ip / country_code / region / city / latitude / longitude / org / asn / asn_name / timezone / source / fetched_at / raw`。
+
+### ip2location 使用
+- 配置：在 `.env` 设 `IP2LOCATION_API_KEY=...`（gitignored；key 经 requests `params` 传递，不进 `HttpResult.url`/日志）。
+- 手动测试：`python scripts/provider_smoke_test.py --provider ip2location --query 8.8.8.8`
+  - 未配置 key 时**优雅提示缺 key**，不发请求、不打印 key、不崩溃。
+- 统一输出字段：`ip / country_code / country_name / region / city / latitude / longitude / isp / domain / usage_type / asn / asn_name / source / fetched_at / raw`。
+
+### ipinfo vs ip2location 字段差异
+| 维度 | ipinfo | ip2location |
+|---|---|---|
+| 认证 | `Authorization: Bearer <token>`（请求头） | `?key=<key>`（query param，经 requests `params`） |
+| country_name | 无（仅 `country_code`） | ✅ 有 |
+| isp / domain / usage_type | 无 | ✅ 有（部分需较高套餐） |
+| timezone | ✅ 有 | 本实现未映射（可后续补 `time_zone`） |
+| ASN 来源 | 解析 `org`（如 `AS15169 Google LLC`） | 独立 `asn` + `as` 字段 |
+| 缓存 TTL | `IPINFO_CACHE_TTL_DAYS`（默认 14） | `IP2LOCATION_CACHE_TTL_DAYS`（默认 14） |
+
+> 两者字段不完全一致 —— 这正是未来**结果合并策略**要解决的问题：合并进 `query_ip` 时需定义统一 GeoIP 字段优先级（多源同字段如何取舍、缺字段如何回退）。该策略留待 enrichment 阶段评审，本阶段不做。
 
 - 代码：`python/providers/online/*.py`
 - 注册：`python/providers/online/__init__.py` 的 `ONLINE_PROVIDERS`

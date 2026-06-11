@@ -134,6 +134,13 @@ def main() -> int:
         print(f"  Lat/Lon   : {d.get('latitude')}, {d.get('longitude')}")
         print(f"  ASN       : AS{d.get('asn')}  {d.get('asn_name')}")
         print(f"  Timezone  : {d.get('timezone')}")
+    elif name == "ip2location":
+        print(f"  IP        : {d.get('ip')}")
+        print(f"  Location  : {d.get('city')}, {d.get('region')}, {d.get('country_name')} ({d.get('country_code')})")
+        print(f"  Lat/Lon   : {d.get('latitude')}, {d.get('longitude')}")
+        print(f"  ASN       : AS{d.get('asn')}  {d.get('asn_name')}")
+        print(f"  ISP       : {d.get('isp')}")
+        print(f"  Usage     : {d.get('usage_type')}")
     else:
         for k, val in d.items():
             if k != "raw":

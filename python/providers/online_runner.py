@@ -27,7 +27,7 @@ from providers.types import ProviderCategory
 
 
 # 默认仅允许已实现的无副作用在线 provider
-ALLOWED_PROVIDERS = {"bgpview", "ipinfo"}
+ALLOWED_PROVIDERS = {"bgpview", "ipinfo", "ip2location"}
 
 
 def _env_true(name: str, default: bool = True) -> bool:
@@ -62,6 +62,8 @@ def _ttl_seconds(provider) -> int:
         return _env_int("BGPVIEW_CACHE_TTL_DAYS", 30) * 86400
     if name == "ipinfo":
         return _env_int("IPINFO_CACHE_TTL_DAYS", 14) * 86400
+    if name == "ip2location":
+        return _env_int("IP2LOCATION_CACHE_TTL_DAYS", 14) * 86400
     if cat == ProviderCategory.THREAT_INTEL:
         return 6 * 3600          # 威胁类默认 6 小时
     return 14 * 86400

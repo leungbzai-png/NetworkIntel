@@ -48,7 +48,13 @@
 - `scripts/provider_smoke_test.py`：新增 `--provider`，仅在显式指定且已配置 key 时才请求需 key 的 provider。
 - 缓存/限速设计：`docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`。
 
-**下一步顺序**：`ip2location`（GeoIP，低风险）→ **先落地缓存+限速** → 再 `abuseipdb`（威胁类、额度敏感）→ `threatfox`。
+**已完成：`ip2location`** ✅
+- `python/providers/online/ip2location.py`：真实 `query()`（key 经 `params`，不进 URL/日志）；401/403/429/5xx/超时统一失败对象；字段 `ip/country_code/country_name/region/city/lat/lon/isp/domain/usage_type/asn/asn_name/...`。
+- 复用现有 `providers.http` + `cache` + `ratelimit` + `online_runner`（已加入允许列表，TTL `IP2LOCATION_CACHE_TTL_DAYS` 默认 14）。
+- `tests/test_ip2location_provider.py`：缺 key/占位符/已配置/normalize/query 成功/401/429/超时 + 经 runner 的缓存命中与 force_refresh（零网络，key 不泄露）。
+
+**缓存+限速基础设施已落地**（见 `ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`）。
+**下一步顺序**：`abuseipdb`（威胁类、额度敏感）→ `threatfox`。
 **为何暂不接 AbuseIPDB**：免费约 1000/天且威胁类 TTL 短，无缓存+限速时批量查询极易耗尽额度/触发封禁；必须先落地 `online_cache` + 令牌桶 + 429 熔断。
 
 ### 第 2 批（中期，中风险）— 下载源「双轨」纳管

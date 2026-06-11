@@ -28,6 +28,7 @@ D:\Python\python.exe tests/run_tests.py
 | `test_bgpview_provider.py` | 导入不联网；`validate_config`；`normalize_result`（mock）；`query`（monkeypatch http，成功+失败） |
 | `test_online_provider_templates.py` | `requires_api_key`/`config_keys`/`ENV_KEY`；缺 key 优雅校验；`query` 骨架不联网；`normalize_result` mock |
 | `test_ipinfo_provider.py` | ipinfo 缺 key/占位符/已配置；normalize；query 成功/401/429/超时（mock）；token 不泄露 |
+| `test_ip2location_provider.py` | ip2location 缺 key/占位符/已配置；normalize；query 成功/401/429/超时；经 runner 的缓存命中 + force_refresh；key 不泄露 |
 | `test_provider_cache.py` | online_cache set/get；过期不命中；purge_expired；stats；upsert（临时库+可控时钟） |
 | `test_provider_ratelimit.py` | 限额生效与窗口恢复；429 冷却；Retry-After；stats（临时 JSON+可控时钟） |
 | `test_online_runner.py` | 缓存命中不回源；force_refresh 绕过；use_cache=False；缺 key 优雅；不允许的 provider |
@@ -45,5 +46,5 @@ D:\Python\python.exe tests/run_tests.py
 ## 5. 当前结果
 
 ```
-44/44 passed, 0 failed
+53/53 passed, 0 failed
 ```

@@ -10,12 +10,11 @@ import os
 import _bootstrap  # noqa: F401
 
 from providers.online import ONLINE_PROVIDERS
-from providers.online.ip2location import IP2LocationProvider
 from providers.online.abuseipdb import AbuseIPDBProvider
 from providers.online.threatfox import ThreatFoxProvider
 
-# 仍为骨架的模板（ipinfo 已实现，单独由 test_ipinfo_provider.py 覆盖）
-TEMPLATES = [IP2LocationProvider, AbuseIPDBProvider, ThreatFoxProvider]
+# 仍为骨架的模板（ipinfo / ip2location 已实现，单独由各自测试覆盖）
+TEMPLATES = [AbuseIPDBProvider, ThreatFoxProvider]
 
 
 def test_registry_contains_all_online():
