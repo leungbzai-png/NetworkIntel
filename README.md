@@ -193,22 +193,29 @@ GeoLite2 提供免费的城市级地理位置数据，需要注册账号获取 L
 
 ### 填入配置
 
-**方法一：程序界面设置**
-- 启动程序 → F6设置页 → 粘贴 License Key → 保存
+**推荐方式：写入 `.env`（绝不进 Git）**
 
-**方法二：直接编辑配置文件**
-打开 `E:\NetworkIntel\configs\sources.yaml`，找到：
-```yaml
-geoip:
-  license_key: "YOUR_MAXMIND_LICENSE_KEY_HERE"
-```
-替换为你的 Key（下面是占位示意，请填你自己的真实 Key）：
-```yaml
-geoip:
-  license_key: "<在此粘贴你的_MaxMind_License_Key>"
-```
-> 推荐做法：不要把真实 Key 写进 `sources.yaml`，而是写进 `.env` 的 `MAXMIND_LICENSE_KEY=`，
-> `sources.yaml` 用 `${MAXMIND_LICENSE_KEY}` 引用（见「配置方式」）。
+1. 复制示例为 `.env`：
+   ```cmd
+   copy .env.example .env
+   ```
+2. 在 `.env` 中填写你的真实 Key（`.env` 已被 `.gitignore` 忽略，不会提交）：
+   ```
+   MAXMIND_LICENSE_KEY=your_key_here
+   ```
+3. `configs/sources.yaml` 中用占位符引用（**不写真实 Key**）：
+   ```yaml
+   geoip:
+     license_key: "${MAXMIND_LICENSE_KEY}"
+   ```
+   程序启动时由 `config_loader` 自动把 `${MAXMIND_LICENSE_KEY}` 解析为 `.env` 中的值。
+
+**也可：程序界面设置**
+- 启动程序 → F6 设置页 → 粘贴 License Key → 保存（写入 `.env`，不写回 yaml）。
+
+> ⚠ **不推荐**把真实 Key 直接写进 `configs/sources.yaml`。
+> 直接编辑 yaml 填明文 Key **仅限本地临时测试**，且 **绝不要提交到 Git**
+> （`configs/sources.yaml` 已被 `.gitignore` 忽略，但明文 Key 仍可能被误复制/泄漏）。
 
 ---
 
@@ -335,6 +342,11 @@ gdrive_sync\
 ```
 E:\NetworkIntel\python\dist\NetworkIntel.exe
 ```
+
+> **exe 需要本地自行构建。** `dist/`、`build/` 与 exe **不随源码仓库发布**（已在 `.gitignore`）：
+> 它们体积大、与本机环境相关，且 GitHub 源码仓库只放源代码。
+> 未来若提供预编译版本，会通过 **GitHub Releases** 分发（作为 Release 附件），
+> 而**不会**提交进 Git 仓库。
 
 **注意**：PyInstaller 打包的 exe 可能被杀毒软件（360、火绒等）误报。
 解决方法：将 `dist\` 目录加入杀毒软件白名单/信任区。
@@ -524,9 +536,9 @@ key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存
 
 当前公开版本 **v0.1.0**。后续规划（轻量、可能调整，见 [`ROADMAP.md`](ROADMAP.md)）：
 
-- **v0.2.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）
-- **v0.3.0** SQLite 写入串行化（busy_timeout → 写锁/队列 → 事务原子化）
-- **v0.4.0** GUI 优化（审计后）
+- **v0.2.0** SQLite 写入串行化（busy_timeout → 写锁或 writer queue → 事务原子化）
+- **v0.3.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）
+- **v0.4.0** GUI 状态页：Provider 状态 / 缓存与限速状态展示
 - **v0.5.0** 发布包 / 数据分离
 - **v1.0.0** 稳定版
 

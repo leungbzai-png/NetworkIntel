@@ -81,19 +81,22 @@ key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存
 
 ## 已知限制
 
-- **数据库不随源码发布**：首次需联网下载（之后查询离线）。
-- **API key 需用户自行配置**：在线 Provider 不带任何内置 key。
 - **SQLite 并发写入风险已审计但 v0.1.0 未修复**：GUI/调度器「全部更新」并发写库可能偶发
-  `database is locked`（随机源 status=error）。**规避：改用 `update.bat`（串行）**。详见并发审计文档。
+  `database is locked`（随机源 status=error）。**规避：改用 `update.bat`（串行更新）**。
+  已在 `docs/SQLITE_CONCURRENCY_AUDIT.md` 完整审计，并列为 **v0.2.0 优先处理**项。
+- **exe 不随源码仓库发布**：`dist/` / `build/` / exe 均不入库；需本地 `build_exe.bat` 自行构建。
+  未来若提供预编译版本，将通过 **GitHub Releases** 分发，而非提交进 Git 仓库。
+- **API key 与数据库不随源码仓库发布**：仓库不含任何真实 key，也不含数据库文件；
+  克隆后需自行在 `.env` 配置 key 并运行 `update.bat` 下载数据（之后查询离线）。
 - **在线 Provider 不接入 `query_ip` 主流程**：在线能力仅旁路，离线主查询不依赖任何外部网络。
 
 ---
 
 ## 下一步计划
 
-- **v0.2.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）。
-- **v0.3.0** SQLite 写入串行化（busy_timeout → 写锁/队列 → 事务原子化）。
-- **v0.4.0** GUI 优化（审计后）。
+- **v0.2.0** SQLite 写入串行化（**优先**：busy_timeout → 写锁或 writer queue → 事务原子化）。
+- **v0.3.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）。
+- **v0.4.0** GUI 状态页：Provider 状态 / 缓存与限速状态展示。
 - **v0.5.0** 发布包 / 数据分离。
 - **v1.0.0** 稳定版。
 
