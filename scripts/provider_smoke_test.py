@@ -39,7 +39,10 @@ def _hr(title: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="NetworkIntel provider 自检")
-    ap.add_argument("--query", default="8.8.8.8", help="BGPView 查询的 IP（默认 8.8.8.8）")
+    ap.add_argument("--query", default="8.8.8.8", help="查询的 IP（默认 8.8.8.8）")
+    ap.add_argument("--provider", default="bgpview",
+                    help="实测的在线 provider（默认 bgpview，无需 key）。"
+                         "指定 ipinfo 等需 key 的 provider 时，仅在已配置 key 时才发起请求。")
     ap.add_argument("--no-network", action="store_true", help="不发任何网络请求")
     args = ap.parse_args()
 
@@ -71,27 +74,59 @@ def main() -> int:
         keyflag = "需要KEY" if p.requires_api_key else "无需KEY"
         print(f"  {p.name:<14} {p.category.value:<13} {keyflag:<8} {impl:<6} 配置:{status}")
 
-    # ── BGPView 真实查询（无需 key）────────────────────────
-    _hr(f"BGPView 实测查询: {args.query}")
+    # ── 实测查询（仅指定的在线 provider）──────────────────
+    from providers.online import get_online_provider, IMPLEMENTED
+    name = args.provider
+    _hr(f"在线实测: provider={name}  query={args.query}")
+
     if args.no_network:
         print("  已跳过（--no-network）")
         return 0
+
+    p = get_online_provider(name)
+    if p is None:
+        print(f"  [跳过] 未知 provider: {name}")
+        return 0
+
+    # 需要 key 的 provider：仅在已配置 key 时才请求；否则清晰提示，不崩溃
+    if p.requires_api_key:
+        v = p.validate_config()
+        if not v.ok:
+            print(f"  [跳过] {name} 需要 API key 但未配置（{','.join(v.missing)}）。")
+            print(f"         请在 .env 设置后重试（key 不会被打印）。")
+            return 0
+    if name not in IMPLEMENTED:
+        print(f"  [跳过] {name} 仍是骨架（query 未实现）。")
+        return 0
+
     try:
-        from providers.online.bgpview import BGPViewProvider
-        res = BGPViewProvider().query(args.query)
-        if res.error:
-            print(f"  查询失败: {res.error}")
-        else:
-            d = res.data
-            print(f"  IP        : {d.get('ip')}")
-            print(f"  ASN       : AS{d.get('asn')}  {d.get('asn_name')}")
-            print(f"  Prefix    : {d.get('prefix')}")
-            print(f"  Country   : {d.get('country_code')}")
-            print(f"  RIR       : {d.get('rir')}")
-            print(f"  fetched_at: {d.get('fetched_at')}")
+        res = p.query(args.query)
     except Exception as e:
         print(f"  [异常] {type(e).__name__}: {e}")
         return 1
+
+    if res.error:
+        print(f"  查询失败: {res.error}")
+        return 0
+
+    d = res.data
+    if name == "bgpview":
+        print(f"  IP        : {d.get('ip')}")
+        print(f"  ASN       : AS{d.get('asn')}  {d.get('asn_name')}")
+        print(f"  Prefix    : {d.get('prefix')}")
+        print(f"  Country   : {d.get('country_code')}")
+        print(f"  RIR       : {d.get('rir')}")
+    elif name == "ipinfo":
+        print(f"  IP        : {d.get('ip')}")
+        print(f"  Location  : {d.get('city')}, {d.get('region')}, {d.get('country_code')}")
+        print(f"  Lat/Lon   : {d.get('latitude')}, {d.get('longitude')}")
+        print(f"  ASN       : AS{d.get('asn')}  {d.get('asn_name')}")
+        print(f"  Timezone  : {d.get('timezone')}")
+    else:
+        for k, val in d.items():
+            if k != "raw":
+                print(f"  {k:<12}: {val}")
+    print(f"  fetched_at: {d.get('fetched_at')}")
 
     print("\n完成。")
     return 0

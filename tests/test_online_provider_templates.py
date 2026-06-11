@@ -10,12 +10,12 @@ import os
 import _bootstrap  # noqa: F401
 
 from providers.online import ONLINE_PROVIDERS
-from providers.online.ipinfo import IPInfoProvider
 from providers.online.ip2location import IP2LocationProvider
 from providers.online.abuseipdb import AbuseIPDBProvider
 from providers.online.threatfox import ThreatFoxProvider
 
-TEMPLATES = [IPInfoProvider, IP2LocationProvider, AbuseIPDBProvider, ThreatFoxProvider]
+# 仍为骨架的模板（ipinfo 已实现，单独由 test_ipinfo_provider.py 覆盖）
+TEMPLATES = [IP2LocationProvider, AbuseIPDBProvider, ThreatFoxProvider]
 
 
 def test_registry_contains_all_online():
@@ -69,7 +69,6 @@ def test_query_skeleton_not_implemented_no_network():
 def test_normalize_result_handles_mock():
     # 各模板的 normalize_result 用最简模拟数据，确保不崩溃
     samples = {
-        "ipinfo":      {"ip": "8.8.8.8", "country": "US", "org": "AS15169 Google LLC", "loc": "37.4,-122.0"},
         "ip2location": {"ip": "8.8.8.8", "country_code": "US", "asn": "15169"},
         "abuseipdb":   {"data": {"ipAddress": "8.8.8.8", "abuseConfidenceScore": 0, "countryCode": "US"}},
         "threatfox":   {"data": [{"threat_type": "botnet_cc", "malware_printable": "X"}]},

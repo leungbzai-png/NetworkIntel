@@ -39,8 +39,17 @@
 
 > 它们都实现 `OnlineQueryProvider.query()` + `normalize_result()` + `validate_config()`，不实现 `update()`。当前以「独立查询/旁路」方式验证，**未接入 `query_ip`**。
 
-### 第 1.5 批（下阶段，低风险）— 把骨架补成真实实现
+### 第 1.5 批（进行中，低风险）— 把骨架补成真实实现
 逐个把 ipinfo / ip2location / abuseipdb / threatfox 的 `query()` 从骨架补成真实请求（用 `providers.http`），加 mock 单测；仍保持旁路。
+
+**已完成：`ipinfo`** ✅
+- `python/providers/online/ipinfo.py`：真实 `query()`（`Authorization: Bearer` 头，token 不进 URL/日志/异常）；401/403/429/5xx/超时统一失败对象。
+- `tests/test_ipinfo_provider.py`：缺 key / 占位符 / 已配置 / normalize / query 成功 / 401 / 429 / 超时（默认零网络，token 不泄露）。
+- `scripts/provider_smoke_test.py`：新增 `--provider`，仅在显式指定且已配置 key 时才请求需 key 的 provider。
+- 缓存/限速设计：`docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`。
+
+**下一步顺序**：`ip2location`（GeoIP，低风险）→ **先落地缓存+限速** → 再 `abuseipdb`（威胁类、额度敏感）→ `threatfox`。
+**为何暂不接 AbuseIPDB**：免费约 1000/天且威胁类 TTL 短，无缓存+限速时批量查询极易耗尽额度/触发封禁；必须先落地 `online_cache` + 令牌桶 + 429 熔断。
 
 ### 第 2 批（中期，中风险）— 下载源「双轨」纳管
 - 让 `LegacyDownloadAdapter` 在 `do_update.py` 中**可选**地枚举（feature flag），与旧 `PLUGIN_REGISTRY` 并存验证一致性。

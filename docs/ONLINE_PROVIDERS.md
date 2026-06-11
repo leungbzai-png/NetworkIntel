@@ -9,10 +9,18 @@
 | Provider | 类别 | 需要 Key | 状态 | env 变量 |
 |---|---|---|---|---|
 | `bgpview` | ASN/BGP | 否 | ✅ 已实现 query() | — |
-| `ipinfo` | GeoIP | 是 | 🧩 骨架 | `IPINFO_TOKEN` |
+| `ipinfo` | GeoIP/ASN | 是 | ✅ 已实现 query()（带 token） | `IPINFO_TOKEN` |
 | `ip2location` | GeoIP | 是 | 🧩 骨架 | `IP2LOCATION_API_KEY` |
 | `abuseipdb` | 威胁情报 | 是 | 🧩 骨架 | `ABUSEIPDB_API_KEY` |
 | `threatfox` | 威胁情报 | 是 | 🧩 骨架 | `THREATFOX_API_KEY` |
+
+> 缓存 / 限速 / 离线降级的设计见 `docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`（合并进主查询前的前置条件）。
+
+### ipinfo 使用
+- 配置：在 `.env` 设 `IPINFO_TOKEN=...`（gitignored；token 经 `Authorization: Bearer` 头发送，不进 URL/日志）。
+- 手动测试：`python scripts/provider_smoke_test.py --provider ipinfo --query 8.8.8.8`
+  - 未配置 token 时**优雅提示缺 key**，不发请求、不打印 token、不崩溃。
+- 统一输出字段：`ip / country_code / region / city / latitude / longitude / org / asn / asn_name / timezone / source / fetched_at / raw`。
 
 - 代码：`python/providers/online/*.py`
 - 注册：`python/providers/online/__init__.py` 的 `ONLINE_PROVIDERS`
