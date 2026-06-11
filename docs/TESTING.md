@@ -48,5 +48,5 @@ D:\Python\python.exe tests/run_tests.py
 ## 5. 当前结果
 
 ```
-76/76 passed, 0 failed
+111/111 passed, 0 failed
 ```

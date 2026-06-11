@@ -11,7 +11,11 @@ rem  内容：GUI exe + 配置模板(.example) + .env.example + 关键文档
 rem  注意：exe / dist / zip 已被 .gitignore 忽略，不会进版本库。
 rem ============================================================
 
-set /p VER=<VERSION
+set "VER="
+for /f "usebackq tokens=* delims= " %%v in ("VERSION") do if not defined VER set "VER=%%v"
+if not defined VER (
+    echo FAILED: cannot read VERSION file & pause & exit /b 1
+)
 echo ================================================
 echo  NetworkIntel - Package Portable
 echo  Version: %VER%
@@ -72,16 +76,15 @@ if exist "docs\FIRST_RUN_SETUP.md" copy /Y "docs\FIRST_RUN_SETUP.md" "%STAGE%\FI
 if exist "docs\PORTABLE_MODE.md" copy /Y "docs\PORTABLE_MODE.md" "%STAGE%\PORTABLE_MODE.md" >nul
 
 echo [3/4] Writing quick-start note ...
-> "%STAGE%\READ_ME_FIRST.txt" (
-    echo NetworkIntel v%VER% - Portable
-    echo ============================================================
-    echo 1^) 双击 NetworkIntel.exe 启动。首次运行会在本目录自动创建
-    echo    configs/ live/ cache/ logs/ reports/ snapshots/ backups/。
-    echo 2^) 首次缺少数据库时会弹出「数据初始化」向导：选择
-    echo    最小/推荐/完整/自定义，串行下载数据源。
-    echo 3^) geoip 需 MaxMind Key：设置页填写后再下载（仅写入 .env）。
-    echo 4^) 详见 FIRST_RUN_SETUP.md 与 PORTABLE_MODE.md。
-)
+set "NOTE=%STAGE%\READ_ME_FIRST.txt"
+echo NetworkIntel v%VER% - Portable> "%NOTE%"
+echo ============================================================>> "%NOTE%"
+echo 1. 双击 NetworkIntel.exe 启动。首次运行会在本目录自动创建>> "%NOTE%"
+echo    configs/ live/ cache/ logs/ reports/ snapshots/ backups/。>> "%NOTE%"
+echo 2. 首次缺少数据库时会弹出「数据初始化」向导：选择>> "%NOTE%"
+echo    最小/推荐/完整/自定义，串行下载数据源。>> "%NOTE%"
+echo 3. geoip 需 MaxMind Key：设置页填写后再下载（仅写入 .env）。>> "%NOTE%"
+echo 4. 详见 FIRST_RUN_SETUP.md 与 PORTABLE_MODE.md。>> "%NOTE%"
 
 echo [4/4] Zipping ...
 if exist "%ZIP%" del /Q "%ZIP%"

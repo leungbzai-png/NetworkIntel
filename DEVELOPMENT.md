@@ -114,7 +114,7 @@ python -m pytest                     # 等价（读 pytest.ini）
 - **不提交**：`.env`、`configs/sources.yaml`、`cache/`、`logs/`、`reports/`、`snapshots/`、`backups/`、
   `live/*.db`（已 gitignore，提交前再 `git status` 确认）。
 - **提交信息**：祈使句、类型前缀（`feat:` / `fix:` / `docs:` / `chore:`），一句话说清 What/Why。
-- **提交前**：跑 `python tests/run_tests.py`（应 76/76）；`git diff` 确认无真实 key、无大文件。
+- **提交前**：跑 `python tests/run_tests.py`（应 111/111）；`git diff` 确认无真实 key、无大文件。
 
 ---
 

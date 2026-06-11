@@ -183,7 +183,7 @@ SQLite 默认 busy timeout 为 0 → 一旦写锁被别的写者占用，**立�
 - **并发压测**：N 个线程同时 `trigger_all()`，断言所有源最终 `status=ok`、无 `database is locked`。
 - **锁等待验证**：人为持有写事务，另一线程在 busy_timeout 内应等待成功而非立即报错。
 - **原子性验证**：在 `load()` 的 DELETE 与 INSERT 之间注入异常，断言表数据要么是旧的、要么是新的，不为空。
-- **回归**：`python tests/run_tests.py` 应保持 76/76；`do_update.py` 串行路径行为不变。
+- **回归**：`python tests/run_tests.py` 应保持全绿（当前 111/111）；`do_update.py` 串行路径行为不变。
 - **离线读不受影响**：写入进行时并发执行 `query_ip`，断言读取始终成功（验证 WAL 读写分离）。
 
 ---
