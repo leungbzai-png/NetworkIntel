@@ -2,6 +2,9 @@
 
 > 每次发布/打 tag 前逐项确认。任一项不通过则**不发布**。
 
+> ⚠ **v0.2.0 Phase 1（`0.2.0-phase1`）是开发中 checkpoint，不是发布**：只 commit，**不打 tag、不发 GitHub Release**。
+> 正式发布 `0.2.0` 须等 Phase 2（首次运行向导 + 数据源选择下载 + 打包 Release zip）完成后再走本清单。
+
 ## A. 密钥与隐私
 - [ ] **无真实 key/token**：`git diff` 与 `git ls-files` 中不含真实密钥
       （`git grep -iE "api_key|token|license_key"` 命中的均为 `${VAR}` 或 `your_..._here` 占位符）。
@@ -14,7 +17,7 @@
 - [ ] 仓库体积合理（无意外的二进制/数据大文件混入）。
 
 ## C. 测试
-- [ ] `python tests/run_tests.py` → **76/76 passed, 0 failed**（或随版本递增后的全绿）。
+- [ ] `python tests/run_tests.py` → **95/95 passed, 0 failed**（或随版本递增后的全绿）。
 - [ ] 测试默认**零网络**、输出**无真实 key**。
 
 ## D. 入口可运行

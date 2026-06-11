@@ -1,7 +1,13 @@
 # NetworkIntel 本地离线IP情报平台
 
-> **当前版本：v0.1.0**（首个公开规范化版本）
+> **公开版本：v0.1.0** · **开发中：v0.2.0 Phase 1 checkpoint（`0.2.0-phase1`）**
 > 离线查IP，全可视化界面，Windows原生部署，无需Docker
+
+> 🧳 **v0.2.0 Phase 1 起支持任意目录运行（Portable）**：不再锁定 `E:\NetworkIntel`，
+> 解压到任意文件夹即可运行；首次运行自动创建目录与配置模板；可在 GUI 设置页填写 key 并选择数据目录模式。
+> 详见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)。本文中出现的 `E:\NetworkIntel` 仅为**示例路径**，可替换为任意目录。
+>
+> Phase 1 仅实现 Portable Runtime / Key Settings / Data Directory Mode；**首次运行向导、数据源选择下载、打包 Release 属于 Phase 2**，本 checkpoint 未打 tag、未发 Release。
 
 ---
 
@@ -39,6 +45,7 @@
 | [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md) | 发布前检查清单 |
 | [`CLAUDE_HANDOFF.md`](CLAUDE_HANDOFF.md) | 给后续 AI/人接手的红线与交接说明 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 项目规范化变更记录 |
+| [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md) | Portable 运行模式 / 数据目录模式 / 首次运行初始化（v0.2.0 Phase 1） |
 | [`docs/ONLINE_PROVIDERS.md`](docs/ONLINE_PROVIDERS.md) | 在线 Provider 说明 |
 | [`docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`](docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md) | 缓存 / 限速 / 熔断设计 |
 | [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md) | SQLite 并发写入审计 |

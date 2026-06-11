@@ -9,7 +9,7 @@
 
 1. **不要把在线 API 接进 `query_ip` 主流程。** `query/engine.py::query_ip` 必须保持**纯离线、只读 SQLite**。
    在线 Provider 永远是旁路增强；要接入只能走 v0.3.0 的独立 `enrich()`（可选、可关闭，不改 `query_ip` 内部）。
-2. **不要移动主数据库**，也不要移动 `cache/ logs/ reports/ snapshots/ backups/ live/`。路径写在配置与 `.gitignore` 里，移动会破坏备份/快照/同步链路。
+2. **不要移动主数据库**，也不要移动 `cache/ logs/ reports/ snapshots/ backups/ live/`。自 v0.2.0 Phase 1 起这些目录由 `python/utils/paths.py` 统一解析（portable 跟随程序目录 / custom 跟随 `NETWORKINTEL_DATA_DIR`）；**所有运行时路径必须经 `paths` 或 `Config` 属性获取，禁止再写死任何绝对路径**（包括用新硬编码替换旧 `E:\NetworkIntel`）。
 3. **不要修改 SQLite 表结构**（`utils/schema.py` 的表定义）。并发问题是访问模式问题，不是 schema 问题。
 4. **改 GUI 前先审计。** GUI 文件大、副作用多（`main_gui.py` / `gui_extensions.py` / `gui_map.py`），盲改易回归。
 5. **不要提交** `.env` / `configs/sources.yaml` / `cache/` / `logs/` / `reports/` / `snapshots/` / `backups/` / `live/*.db`。
@@ -57,7 +57,7 @@
 ## 4. 当前测试入口
 
 ```cmd
-python tests/run_tests.py            # 76 用例，无需 pytest
+python tests/run_tests.py            # 95 用例，无需 pytest
 python -m pytest                     # 等价
 ```
 默认零网络（HTTP 层 monkeypatch）；限速测试用临时 JSON + 注入时钟；输出无真实 key。
@@ -66,15 +66,18 @@ python -m pytest                     # 等价
 
 ## 5. 当前推荐下一步（路线优先级）
 
-1. **v0.2.0 SQLite 写入串行化**（审计已就绪，**最高优先**）：busy_timeout → 写锁或 writer queue →
+> **当前进度**：v0.2.0 **Phase 1**（Portable Runtime + Key Settings + Data Directory Mode）已完成 checkpoint，
+> 版本标识 `0.2.0-phase1`，**未打 tag、未发 Release**。Portable 细节见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)。
+
+1. **v0.2.0 Phase 2**（下一步）：首次运行向导 + 数据源选择下载（最小/推荐/完整/自定义）+ 打包 Release zip，完成后改正式 `0.2.0` 并打 tag / 发 Release。
+2. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout → 写锁或 writer queue →
    事务原子化 → 错误分类 → 压测。按 `docs/SQLITE_CONCURRENCY_TODO.md` 分步、每步独立可回滚。
-2. **v0.3.0 可选 online enrichment**：独立 `enrich()` 模块，可关闭，不改 `query_ip`。
-3. **v0.4.0 GUI 状态页**：Provider 状态 / 缓存与限速状态展示（审计后再改 GUI）。
-4. **v0.5.0 发布包 / 数据分离**；**v1.0.0 稳定版**。
+3. **v0.4.0 可选 online enrichment 接入 GUI**：独立 `enrich()` 模块，可关闭，不改 `query_ip`。
+4. **v0.5.0 Provider 状态页**；**v1.0.0 稳定版**。
 5. 旁路补全：**ThreatFox** 真实实现（参考 abuseipdb）。
 
-> 路线与 `README.md` / `ROADMAP.md` / `PROJECT_STATUS.md` 保持一致：v0.2.0=SQLite 串行化，
-> v0.3.0=enrichment，v0.4.0=GUI 状态页，v0.5.0=发布包/数据分离，v1.0.0=稳定版。
+> 路线与 `README.md` / `ROADMAP.md` / `PROJECT_STATUS.md` 保持一致：v0.2.0=Portable（Phase1）+ 首次向导/数据源选择/发布包（Phase2），
+> v0.3.0=SQLite 串行化，v0.4.0=enrichment 接入 GUI，v0.5.0=Provider 状态页，v1.0.0=稳定版。
 
 ---
 
@@ -106,7 +109,8 @@ git diff | findstr /I "api_key token license_key"
 
 | commit | 说明 |
 |---|---|
-| `docs: finalize project handoff and sqlite concurrency audit` | 本轮：项目文档收尾 + SQLite 并发审计（只审计未改源码） |
+| `feat: add portable runtime and key settings` | 本轮（v0.2.0 Phase 1）：统一 `utils/paths.py` portable 路径系统；任意目录运行；首次运行自动建目录/模板；GUI key 设置 + 数据目录 portable/custom；模板与 `.bat` 去硬编码；测试增至 95 |
+| `docs: finalize project handoff and sqlite concurrency audit` | 项目文档收尾 + SQLite 并发审计（只审计未改源码） |
 | `feat: add abuseipdb provider with rate limit safeguards` | AbuseIPDB 旁路实现；限速增强（per_day=900、连续 429 熔断）；测试增至 76 |
 | `feat: implement ip2location online provider in bypass mode` | ip2location 在线旁路实现 |
 | `feat: add online provider cache and rate limiting foundation` | 在线缓存 + 限速基础设施 |

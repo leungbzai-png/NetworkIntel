@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 
 def setup_logger(
     name: str = "networkintel",
-    logs_dir: str = r"E:\NetworkIntel\logs",
+    logs_dir: str = None,
     level: str = "INFO",
     console: bool = False,
 ) -> logging.Logger:
@@ -20,10 +20,15 @@ def setup_logger(
     设置并返回 Logger
     - 日志文件按日滚动，保留30天
     - 文件最大10MB，保留5个备份
+    - logs_dir 为 None 时使用 Portable 路径系统解析的日志目录
     """
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
+
+    if logs_dir is None:
+        from utils import paths
+        logs_dir = str(paths.get_logs_dir())
 
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 

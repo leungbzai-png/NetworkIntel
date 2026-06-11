@@ -1404,16 +1404,61 @@ class SettingsPage(QWidget):
         root.addWidget(title)
         root.addWidget(sub)
 
-        # MaxMind
-        c, l = make_card("MAXMIND GEOLITE2", self)
-        l.addWidget(QLabel("License Key"))
-        self.maxmind_input = QLineEdit()
-        self.maxmind_input.setPlaceholderText("注册后从 MaxMind 控制台生成的 Key")
-        l.addWidget(self.maxmind_input)
-        tip = QLabel("注册：https://www.maxmind.com/en/geolite2/signup")
-        tip.setStyleSheet("color:#6B7280; font-size:12px;")
-        tip.setOpenExternalLinks(True)
-        l.addWidget(tip)
+        # Provider Key 管理（全部保存到 .env，不写入 sources.yaml 明文）
+        self.KEY_FIELDS = [
+            ("MAXMIND_LICENSE_KEY", "MaxMind Key",
+             "注册：https://www.maxmind.com/en/geolite2/signup"),
+            ("IPINFO_TOKEN", "ipinfo",
+             "https://ipinfo.io/account/token"),
+            ("IP2LOCATION_API_KEY", "ip2location",
+             "https://www.ip2location.io/"),
+            ("ABUSEIPDB_API_KEY", "AbuseIPDB",
+             "https://www.abuseipdb.com/account/api"),
+        ]
+        self.key_inputs: dict[str, QLineEdit] = {}
+        self.key_status: dict[str, QLabel] = {}
+
+        c, l = make_card("API KEY", self)
+        intro = QLabel("Key 保存到 .env（不写入 sources.yaml）。留空表示不修改。")
+        intro.setStyleSheet("color:#6B7280; font-size:12px;")
+        l.addWidget(intro)
+
+        for env_var, label, tip_text in self.KEY_FIELDS:
+            head = QHBoxLayout()
+            head.addWidget(QLabel(label))
+            status = QLabel("未配置")
+            status.setStyleSheet("color:#9CA3AF; font-size:12px;")
+            head.addStretch(1)
+            head.addWidget(status)
+            l.addLayout(head)
+            self.key_status[env_var] = status
+
+            row = QHBoxLayout()
+            inp = QLineEdit()
+            inp.setEchoMode(QLineEdit.Password)
+            inp.setPlaceholderText("输入新 Key 以更新（留空保持不变）")
+            toggle = QToolButton()
+            toggle.setCheckable(True)
+            toggle.setText("显示")
+            toggle.toggled.connect(
+                lambda checked, e=env_var, b=None: self._toggle_key_echo(e, checked))
+            # 绑定按钮文本切换
+            toggle.toggled.connect(
+                lambda checked, t=toggle: t.setText("隐藏" if checked else "显示"))
+            row.addWidget(inp, 1)
+            row.addWidget(toggle)
+            l.addLayout(row)
+            self.key_inputs[env_var] = inp
+
+            tip = QLabel(tip_text)
+            tip.setStyleSheet("color:#6B7280; font-size:11px;")
+            tip.setOpenExternalLinks(True)
+            l.addWidget(tip)
+
+        self.btn_save_keys = QPushButton("保存 Key")
+        self.btn_save_keys.setObjectName("Primary")
+        self.btn_save_keys.clicked.connect(self._save_keys)
+        l.addWidget(self.btn_save_keys)
         root.addWidget(c)
 
         # 主题
@@ -1425,8 +1470,37 @@ class SettingsPage(QWidget):
         l.addWidget(self.theme_combo)
         root.addWidget(c)
 
-        # 路径
-        c, l = make_card("路径", self)
+        # 数据目录模式（Portable / Custom）
+        c, l = make_card("数据目录模式", self)
+        self.home_input = QLineEdit(); self.home_input.setReadOnly(True)
+        l.addWidget(QLabel("程序根目录 (home)")); l.addWidget(self.home_input)
+
+        l.addWidget(QLabel("模式"))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["Portable（数据跟随程序目录）", "Custom（自定义数据目录）"])
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_change)
+        l.addWidget(self.mode_combo)
+
+        l.addWidget(QLabel("数据目录 (data_dir)"))
+        drow = QHBoxLayout()
+        self.data_dir_input = QLineEdit(); self.data_dir_input.setReadOnly(True)
+        self.btn_pick_data = QPushButton("选择目录…")
+        self.btn_pick_data.clicked.connect(self._pick_data_dir)
+        drow.addWidget(self.data_dir_input, 1)
+        drow.addWidget(self.btn_pick_data)
+        l.addLayout(drow)
+
+        self.btn_save_datadir = QPushButton("保存数据目录设置")
+        self.btn_save_datadir.setObjectName("Primary")
+        self.btn_save_datadir.clicked.connect(self._save_data_mode)
+        l.addWidget(self.btn_save_datadir)
+        dhint = QLabel("切换数据目录后需重启程序生效；不会自动搬迁旧数据。")
+        dhint.setStyleSheet("color:#6B7280; font-size:12px;")
+        l.addWidget(dhint)
+        root.addWidget(c)
+
+        # 路径（只读展示）
+        c, l = make_card("当前路径", self)
         self.base_dir_input = QLineEdit()
         self.base_dir_input.setReadOnly(True)
         self.db_path_input = QLineEdit()
@@ -1436,49 +1510,121 @@ class SettingsPage(QWidget):
         l.addWidget(QLabel("项目根目录")); l.addWidget(self.base_dir_input)
         l.addWidget(QLabel("数据库")); l.addWidget(self.db_path_input)
         l.addWidget(QLabel("报告目录")); l.addWidget(self.reports_dir_input)
-        hint = QLabel("如需修改，请编辑 configs/sources.yaml 后重启程序")
-        hint.setStyleSheet("color:#6B7280; font-size:12px;")
-        l.addWidget(hint)
         root.addWidget(c)
 
-        # 保存
+        # 底部操作（各卡片已自带保存按钮）
         bar = QHBoxLayout()
         self.btn_reload = QPushButton("重新加载配置")
         self.btn_reload.clicked.connect(self._reload)
-        self.btn_save = QPushButton("保存")
-        self.btn_save.setObjectName("Primary")
-        self.btn_save.clicked.connect(self._save)
         bar.addWidget(self.btn_reload)
         bar.addStretch(1)
-        bar.addWidget(self.btn_save)
         root.addLayout(bar)
         root.addStretch(1)
 
     def _load(self):
         try:
+            from utils import paths
             cfg = get_config()
-            geo = cfg.get_source("geoip") or {}
-            self.maxmind_input.setText(geo.get("license_key", ""))
+            # Key 状态（绝不回填真实 key 到输入框）
+            status = cfg.get_key_status()
+            for env_var, label, _tip in self.KEY_FIELDS:
+                ok = status.get(env_var, False)
+                lbl = self.key_status[env_var]
+                lbl.setText("已配置" if ok else "未配置")
+                lbl.setStyleSheet(
+                    "color:#16A34A; font-size:12px;" if ok
+                    else "color:#9CA3AF; font-size:12px;")
+            # 数据目录模式
+            self.home_input.setText(str(paths.get_home_dir()))
+            self.mode_combo.blockSignals(True)
+            self.mode_combo.setCurrentIndex(1 if paths.get_data_mode() == "custom" else 0)
+            self.mode_combo.blockSignals(False)
+            self.data_dir_input.setText(str(paths.get_data_dir()))
+            self.btn_pick_data.setEnabled(paths.get_data_mode() == "custom")
+            # 当前路径
             self.base_dir_input.setText(cfg.base_dir)
             self.db_path_input.setText(cfg.db_path)
-            self.reports_dir_input.setText(str(Path(cfg.base_dir) / "reports"))
+            self.reports_dir_input.setText(cfg.reports_dir)
+            # 主题
             theme = cfg.theme or "system"
             idx = {"system": 0, "light": 1, "dark": 2}.get(theme, 0)
+            self.theme_combo.blockSignals(True)
             self.theme_combo.setCurrentIndex(idx)
+            self.theme_combo.blockSignals(False)
         except Exception as e:
             QMessageBox.warning(self, "加载配置失败", str(e))
 
+    def _toggle_key_echo(self, env_var: str, show: bool):
+        inp = self.key_inputs.get(env_var)
+        if inp:
+            inp.setEchoMode(QLineEdit.Normal if show else QLineEdit.Password)
+
     def _on_theme_change(self, idx: int):
         theme = ["system", "light", "dark"][idx]
+        try:
+            get_config().set_theme(theme)
+        except Exception:
+            pass
         self.theme_changed.emit(theme)
 
-    def _save(self):
+    def _save_keys(self):
         try:
             cfg = get_config()
-            cfg.set_maxmind_key(self.maxmind_input.text().strip())
-            theme = ["system", "light", "dark"][self.theme_combo.currentIndex()]
-            cfg.set_theme(theme)
-            QMessageBox.information(self, "已保存", "配置已写入 sources.yaml")
+            saved = []
+            for env_var, label, _tip in self.KEY_FIELDS:
+                val = self.key_inputs[env_var].text().strip()
+                if not val:
+                    continue  # 留空 = 不修改
+                if env_var == "MAXMIND_LICENSE_KEY":
+                    cfg.set_maxmind_key(val)
+                else:
+                    cfg.set_provider_key(env_var, val)
+                self.key_inputs[env_var].clear()
+                saved.append(label)
+            self._load()
+            if saved:
+                QMessageBox.information(
+                    self, "已保存",
+                    "已更新：" + "、".join(saved) + "\n\n"
+                    "· MaxMind Key 用于下载 GeoIP 本地数据库。\n"
+                    "· 在线 Provider key 仅用于旁路增强，不影响离线查询。")
+            else:
+                QMessageBox.information(self, "未修改", "未输入任何新 Key。")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", str(e))
+
+    def _on_mode_change(self, idx: int):
+        self.btn_pick_data.setEnabled(idx == 1)
+
+    def _pick_data_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "选择自定义数据目录")
+        if d:
+            self.data_dir_input.setText(d)
+
+    def _save_data_mode(self):
+        try:
+            from utils import paths
+            from utils.config_loader import upsert_env
+            mode = "custom" if self.mode_combo.currentIndex() == 1 else "portable"
+            env_path = paths.get_env_path()
+            upsert_env(env_path, "NETWORKINTEL_DATA_MODE", mode)
+            if mode == "custom":
+                data_dir = self.data_dir_input.text().strip()
+                if not data_dir:
+                    QMessageBox.warning(self, "未选择目录", "Custom 模式需选择数据目录。")
+                    return
+                upsert_env(env_path, "NETWORKINTEL_DATA_DIR", data_dir)
+                # 立即在自定义目录下创建运行时子目录
+                from pathlib import Path as _P
+                for sub in ("live", "cache", "logs", "reports",
+                            "snapshots", "backups", "gdrive_sync"):
+                    (_P(data_dir) / sub).mkdir(parents=True, exist_ok=True)
+            else:
+                # 切回 portable：忽略 DATA_DIR（置空）
+                upsert_env(env_path, "NETWORKINTEL_DATA_DIR", "")
+            QMessageBox.information(
+                self, "已保存",
+                f"数据目录模式：{mode}\n\n请重启程序以使新数据目录生效。")
         except Exception as e:
             QMessageBox.critical(self, "保存失败", str(e))
 
@@ -1614,7 +1760,17 @@ class MainWindow(QMainWindow):
             self.status_text.setStyleSheet("color:#DC2626;")
         else:
             map_info = "" if MAP_OK else "  ·  地图不可用"
-            self.status_text = QLabel(f"就绪 · 调度器已启动{map_info}")
+            db_missing = False
+            try:
+                db_missing = not Path(get_config().db_path).exists()
+            except Exception:
+                pass
+            if db_missing:
+                self.status_text = QLabel(
+                    "⚠ 数据库未初始化，请在设置页填写 MaxMind Key 后运行更新")
+                self.status_text.setStyleSheet("color:#D97706;")
+            else:
+                self.status_text = QLabel(f"就绪 · 调度器已启动{map_info}")
         sbl.addWidget(self.status_text)
         sbl.addStretch(1)
         self.cfg_label = QLabel("")

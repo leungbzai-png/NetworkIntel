@@ -1,10 +1,14 @@
+# 路径均为相对路径，运行时基于 Portable 数据目录（data_dir）解析。
+# portable 模式 data_dir = 程序所在目录；custom 模式 data_dir = 自定义目录。
+# 无需手动填写绝对路径；如需覆盖可使用环境变量 NETWORKINTEL_DATA_DIR。
 global:
-  base_dir: E:\NetworkIntel
-  db_path: E:\NetworkIntel\live\intel.db
-  snapshots_dir: E:\NetworkIntel\snapshots
-  gdrive_sync_dir: E:\NetworkIntel\gdrive_sync
-  cache_dir: E:\NetworkIntel\cache
-  logs_dir: E:\NetworkIntel\logs
+  base_dir: .
+  db_path: live/intel.db
+  snapshots_dir: snapshots
+  gdrive_sync_dir: gdrive_sync
+  cache_dir: cache
+  logs_dir: logs
+  reports_dir: reports
   log_level: INFO
   theme: system
 sources:

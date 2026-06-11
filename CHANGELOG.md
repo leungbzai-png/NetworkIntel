@@ -5,6 +5,35 @@
 
 ---
 
+## [0.2.0-phase1] - 2026-06-11 — Portable Runtime（开发中 checkpoint，未打 tag / 未发 Release）
+
+v0.2.0 开发的**第一个 checkpoint**：让 NetworkIntel 从锁定 `E:\NetworkIntel` 变成真正支持任意目录运行的 portable 软件。**只 commit，不 tag，不 Release。**
+
+### Portable 路径系统
+- 新增统一路径模块 `python/utils/paths.py`：home 解析优先级 `NETWORKINTEL_HOME` → exe 目录 → 源码项目根 → cwd。
+- 支持环境变量 `NETWORKINTEL_HOME` / `NETWORKINTEL_CONFIG` / `NETWORKINTEL_DATA_MODE` / `NETWORKINTEL_DATA_DIR`。
+- `config_loader` 与 `logger` 的所有路径改为经 `paths` 解析；遗留 `E:\NetworkIntel` 绝对路径仅作兼容 fallback。
+
+### 首次运行自动初始化
+- 自动创建 `configs/live/cache/logs/reports/snapshots/backups/gdrive_sync`。
+- 缺 `.env` 时从 `.env.example` 生成（缺模板用内置占位符模板）；缺 `configs/sources.yaml` 时从 `sources.example.yaml` 生成（缺模板报清晰错误）。
+- 缺 `live/intel.db` **不自动下载、不阻断启动**，仅状态栏提示填 MaxMind Key 后更新。
+
+### 数据目录模式 & GUI Key 设置
+- portable（默认，数据跟随程序目录）/ custom（自定义数据目录，仅写 `.env`，不入版本库）。
+- GUI 设置页可填写 MaxMind / ipinfo / ip2location / AbuseIPDB key：默认隐藏 + 显示切换 + 已配置/未配置状态；只写 `.env`，不写 `sources.yaml` 明文。
+
+### 模板 / 脚本 / 测试
+- `configs/sources.example.yaml` 改相对路径；`.env.example` 增补 portable 变量注释；`.bat` 改用 `%~dp0` 与 PATH 中的 `python`。
+- `.gitignore` 增补 `*.exe` / `*.zip`。
+- 测试增至 **95**（新增 `test_paths` / `test_portable_init` / `test_env_key_storage` / `test_data_dir_mode`）。
+- 新增 `docs/PORTABLE_MODE.md`。
+
+### 留待 v0.2.0 Phase 2
+- 首次运行向导、数据源选择下载（最小/推荐/完整/自定义）、打包 Release zip、改正式 `0.2.0` 并打 tag / 发 Release。
+
+---
+
 ## [v0.1.0] - 2026-06-11 — 首个公开规范化版本
 
 NetworkIntel 的**首个公开发布版本**。把此前的内部开发阶段（脚手架 / 安全整改 / Provider /

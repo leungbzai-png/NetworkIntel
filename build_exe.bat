@@ -1,18 +1,18 @@
 @echo off
 chcp 65001 >nul
 title NetworkIntel - Build EXE
-cd /d E:\NetworkIntel\python
+cd /d "%~dp0python"
 
 echo Building NetworkIntel.exe ...
 echo This may take 5-10 minutes on first run.
 echo.
 
-D:\Python\python.exe -m pip install pyinstaller >nul 2>&1
+python -m pip install pyinstaller >nul 2>&1
 
-D:\Python\python.exe -m PyInstaller ^
+python -m PyInstaller ^
     --onefile ^
     --name NetworkIntel ^
-    --add-data "..\configs;configs" ^
+    --add-data "..\configs\sources.example.yaml;configs" ^
     --hidden-import textual ^
     --hidden-import apscheduler ^
     --hidden-import geoip2 ^
