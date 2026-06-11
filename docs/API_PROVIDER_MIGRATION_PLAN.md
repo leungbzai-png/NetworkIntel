@@ -19,16 +19,28 @@
 - `registry` 以**兼容适配器**方式把现有 17 个源「视图化」为 DownloadProvider（仅注册类/工厂，**不实例化、不读配置**）。
 - 文档三件套（audit / spec / plan）。
 
-### 第 1 批（下阶段，低风险）— 先接「在线查询」新源
-**适合最先接入统一接口的 provider（都是全新代码，不碰旧逻辑）：**
-| Provider | 理由 |
+### 第 1 批（**本阶段已完成** — 旁路能力，低风险）— 在线查询脚手架
+**已落地（全新代码，未接入主流程）：**
+| Provider | 状态 |
 |---|---|
-| **BGPView** | 无需 API Key，公开 JSON，最容易做端到端验证 |
-| **AbuseIPDB** | 在线威胁查询，验证 `requires_api_key`/`rate_limit`/`.env` 全链路 |
-| **ThreatFox** | abuse.ch，验证威胁类 `normalize_result()` 对齐 |
-| **ipinfo** | 验证 GEOIP/ASN 在线归一 |
+| **BGPView** | ✅ 已实现 `query()` + `normalize_result()`（无需 Key），离线 mock 测试通过 |
+| **AbuseIPDB** | 🧩 骨架 + `validate_config()`（`rate_limit` 已声明，免费约 1000/天） |
+| **ThreatFox** | 🧩 骨架 + `validate_config()` |
+| **ipinfo** | 🧩 骨架 + `validate_config()` |
+| **ip2location** | 🧩 骨架 + `validate_config()` |
 
-> 它们都实现 `OnlineQueryProvider.query()` + `normalize_result()` + `validate_config()`，不实现 `update()`。先以「独立查询/旁路」方式验证，**暂不接入 `query_ip`**。
+已新增的支撑件：
+- `python/providers/http.py`：统一 HTTP（timeout/UA/429·5xx 重试/退避/JSON/统一失败对象）。
+- `python/providers/online/`：`base.py`（OnlineApiProvider 密钥解析）+ 5 个 provider。
+- `tests/`（21 用例，默认零网络）+ `tests/run_tests.py`（无 pytest 回退）+ `pytest.ini`。
+- `scripts/provider_smoke_test.py`：手动自检（仅 BGPView 真实请求）。
+- 模板：`.env.example` / `configs/sources.example.yaml` 增加在线 provider 占位与 `ONLINE_PROVIDERS_ENABLED=false`。
+- 文档：`ONLINE_PROVIDERS.md` / `BGPVIEW_PROVIDER.md` / `TESTING.md`。
+
+> 它们都实现 `OnlineQueryProvider.query()` + `normalize_result()` + `validate_config()`，不实现 `update()`。当前以「独立查询/旁路」方式验证，**未接入 `query_ip`**。
+
+### 第 1.5 批（下阶段，低风险）— 把骨架补成真实实现
+逐个把 ipinfo / ip2location / abuseipdb / threatfox 的 `query()` 从骨架补成真实请求（用 `providers.http`），加 mock 单测；仍保持旁路。
 
 ### 第 2 批（中期，中风险）— 下载源「双轨」纳管
 - 让 `LegacyDownloadAdapter` 在 `do_update.py` 中**可选**地枚举（feature flag），与旧 `PLUGIN_REGISTRY` 并存验证一致性。

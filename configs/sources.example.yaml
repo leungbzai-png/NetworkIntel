@@ -142,3 +142,50 @@ sources:
     url: https://peeringdb.com/api/net?depth=2&limit=10000
     description: PeeringDB ASN Peering信息（可选）
     warn_after_days: 35
+
+# ─────────────────────────────────────────────────────────────
+# 在线查询 Provider（旁路能力，默认 enabled:false，未接入 query_ip 离线主流程）
+# 真实密钥写入 .env（gitignored），此处只放 ${VAR} 占位符。
+# 详见 docs/ONLINE_PROVIDERS.md
+# ─────────────────────────────────────────────────────────────
+online_providers:
+  bgpview:
+    enabled: false
+    kind: online_query
+    category: asn
+    requires_api_key: false
+    description: BGPView ASN/BGP 在线查询（无需 key）
+    timeout: 15
+  ipinfo:
+    enabled: false
+    kind: online_query
+    category: geoip
+    requires_api_key: true
+    token: ${IPINFO_TOKEN}
+    description: ipinfo.io 地理/ASN 在线查询
+    timeout: 15
+  ip2location:
+    enabled: false
+    kind: online_query
+    category: geoip
+    requires_api_key: true
+    api_key: ${IP2LOCATION_API_KEY}
+    description: IP2Location.io 地理在线查询
+    timeout: 15
+  abuseipdb:
+    enabled: false
+    kind: online_query
+    category: threat_intel
+    requires_api_key: true
+    api_key: ${ABUSEIPDB_API_KEY}
+    description: AbuseIPDB 威胁在线查询（免费约 1000/天）
+    rate_limit: { max_calls: 1000, period_seconds: 86400 }
+    timeout: 15
+  threatfox:
+    enabled: false
+    kind: online_query
+    category: threat_intel
+    requires_api_key: true
+    api_key: ${THREATFOX_API_KEY}
+    description: ThreatFox(abuse.ch) IOC 在线查询（Auth-Key）
+    timeout: 15
