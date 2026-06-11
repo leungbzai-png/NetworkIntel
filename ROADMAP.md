@@ -2,8 +2,13 @@
 
 > 语义化版本，轻量路线，可能随实际情况调整。当前进度见 [`PROJECT_STATUS.md`](PROJECT_STATUS.md)。
 
-## 当前公开版本：**v0.1.0**（首个公开规范化版本）
-## 开发中：**v0.2.0 Phase 1 checkpoint**（`0.2.0-phase1`，Portable Runtime + Key Settings + Data Directory Mode，未发布、未打 tag）
+## 当前公开版本：**v0.2.0**（Portable Runtime + 首次初始化向导）
+
+v0.2.0 已包含：
+- **Phase 1**：统一 `paths` 模块、任意目录运行、首次运行自动建目录/模板、GUI key 设置、portable/custom 数据目录模式。
+- **Phase 2**：数据库缺失/空库检测、首次初始化向导、数据源选择下载（最小/推荐/完整/自定义）、
+  串行下载 + 进度/失败汇总 + 缺 Key 跳过、正式版本号 0.2.0、打包 portable zip 并发布 Release。
+- 不变量：未新增 Provider、未接入在线 Provider 到主查询、未改 `query_ip`。
 
 v0.1.0 已包含（首个公开版本一次性纳入的工程化主体）：
 - 17 个下载源落库 `intel.db`，`query_ip` 离线只读查询 + 风险分级；TUI / GUI / exe 可运行。
@@ -17,8 +22,7 @@ v0.1.0 已包含（首个公开版本一次性纳入的工程化主体）：
 
 | 版本 | 主题 | 内容（简） |
 |---|---|---|
-| **v0.2.0 Phase 1**（进行中） | Portable Runtime | 统一 `paths` 模块；任意目录运行；首次运行自动建目录/模板；GUI key 设置；数据目录 portable/custom。**修复 v0.1.0 的 `E:\NetworkIntel` 路径锁定。** |
-| **v0.2.0 Phase 2** | First Run Setup + 数据源选择 + 发布包 | 首次初始化向导；最小 / 推荐 / 完整 / 自定义数据源选择下载；最终打包与 Release zip。 |
+| **v0.2.0**（已发布） | Portable Runtime + First Run Setup | 统一 `paths`；任意目录运行；首次运行自动建目录/模板；GUI key 设置；portable/custom 数据目录；首次初始化向导 + 数据源选择串行下载（最小/推荐/完整/自定义）+ 发布包。 |
 | **v0.3.0** | SQLite 写入串行化 / 更新队列稳定性 | 按 `docs/SQLITE_CONCURRENCY_TODO.md`：busy_timeout → 写锁或 writer queue → 事务原子化 → 错误分类 → 压测 |
 | **v0.4.0** | 可选 online enrichment 接入 GUI | 独立 `enrich()` 模块，离线结果可选并入在线字段；可关闭；**不改 `query_ip` 内部** |
 | **v0.5.0** | Provider 状态页 | Provider 状态 / 缓存与限速状态展示；响应性与错误提示优化 |

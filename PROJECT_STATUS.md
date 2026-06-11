@@ -1,6 +1,6 @@
 # 项目状态（PROJECT_STATUS.md）
 
-> 快照日期：**2026-06-11** · 公开版本：**v0.1.0** · 开发中：**v0.2.0 Phase 1 checkpoint**（`0.2.0-phase1`，Portable Runtime + Key Settings + Data Directory Mode，未发布、未打 tag，见 [`ROADMAP.md`](ROADMAP.md) 与 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)）。
+> 快照日期：**2026-06-11** · 公开版本：**v0.2.0**（Portable Runtime + 首次初始化向导，见 [`ROADMAP.md`](ROADMAP.md) / [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md) / [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md)）。
 
 ---
 
@@ -11,15 +11,20 @@
 - ✅ **统一 Provider 架构**：`providers/{types,base,registry}` + 兼容适配旧 17 源；HTTP 工具层（timeout/重试/退避/统一失败对象）。
 - ✅ **在线旁路 Provider**：BGPView（无 key）、ipinfo、ip2location、AbuseIPDB 已实现真实 `query()`；ThreatFox 仍骨架。
 - ✅ **缓存 + 限速 + 熔断**：独立 SQLite 结果缓存；per-provider 限速（分/时/日）；连续 429 熔断；旁路执行器 `online_runner`。
-- ✅ **测试体系**：**95** 个测试，默认零网络，零真实 key 输出（含 portable 路径 / 首次初始化 / key 存储 / 数据目录模式）。
+- ✅ **测试体系**：**110** 个测试，默认零网络，零真实 key 输出（含 portable 路径 / 首次初始化 / key 存储 / 数据目录模式 / 数据源预设与串行下载编排）。
 - ✅ **文档体系**：README/DEVELOPMENT/ROADMAP/PROJECT_STATUS/RELEASE_CHECKLIST/CLAUDE_HANDOFF/CHANGELOG + `docs/*`。
 - ✅ **SQLite 并发写入审计**：`docs/SQLITE_CONCURRENCY_AUDIT.md` + `docs/SQLITE_CONCURRENCY_TODO.md`（只审计、未改源码）。
-- ✅ **v0.2.0 Phase 1 — Portable Runtime**（开发中 checkpoint）：
+- ✅ **v0.2.0 Phase 1 — Portable Runtime**：
   - 统一路径模块 `python/utils/paths.py`，支持 `NETWORKINTEL_HOME/CONFIG/DATA_MODE/DATA_DIR`，**任意目录运行**，不再锁定 `E:\NetworkIntel`。
   - 首次运行自动创建 `configs/live/cache/logs/reports/snapshots/backups/gdrive_sync`，自动初始化 `.env` 与 `configs/sources.yaml`（缺库不自动下载、不阻断启动）。
   - GUI 设置页：MaxMind / ipinfo / ip2location / AbuseIPDB key 填写（隐藏 + 显示切换 + 已配置/未配置状态，只写 `.env`）；数据目录 portable / custom 模式切换。
-  - 模板与脚本去硬编码（`sources.example.yaml` 相对路径、`.bat` 用 `%~dp0` 与 PATH 的 python）。
-  - 详见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)。**Phase 2 才做首次运行向导 / 数据源选择下载 / 打包 Release。**
+  - 模板与脚本去硬编码（`sources.example.yaml` 相对路径、`.bat` 用 `%~dp0` 与 PATH 的 python）。详见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)。
+- ✅ **v0.2.0 Phase 2 — 首次初始化 / 数据源选择下载**：
+  - `python/datasources/setup_profiles.py`：预设分组（最小/推荐/完整）+ 自定义；缺 Key 自动剔除（geoip→MaxMind）。
+  - 数据库缺失/空库检测（`db_status`/`needs_setup`），供状态栏横幅与向导复用。
+  - **串行**下载执行器 `download_sources()`（逐个 `plugin.update()`，绝不并发，规避空库 `database is locked`），失败继续 + 汇总 + 协作式取消，执行器可注入便于零网络测试。
+  - GUI `FirstRunSetupDialog`：首次缺库自动弹出（可关闭、不阻断），「数据源」页「数据初始化…」随时可开；每源 + 整体进度、失败/跳过提示。详见 [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md)。
+  - 正式版本号 `0.2.0`；打包 portable zip 并发布 v0.2.0 Release（不覆盖 v0.1.0）。
 
 ---
 
@@ -38,9 +43,10 @@
 
 ## 3. 当前测试数量
 
-**95 / 95 passed**（`python tests/run_tests.py`）。覆盖：portable 路径解析、首次运行初始化、
+**110 / 110 passed**（`python tests/run_tests.py`）。覆盖：portable 路径解析、首次运行初始化、
 key 存储（.env，不入 yaml）、数据目录 portable/custom、配置加载、Provider 注册表、
-bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 / 清零 / reset）、online_runner、模板。
+bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 / 清零 / reset）、online_runner、模板、
+**数据源预设分组 / key 门控 / 选择顺序 / 串行下载编排与失败汇总 / 取消 / 数据库状态检测**。
 
 ---
 
@@ -79,10 +85,10 @@ bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 
 
 ## 7. 下一步优先级
 
-1. **v0.2.0 Phase 2**：首次运行向导 + 数据源选择下载（最小/推荐/完整/自定义）+ 打包 Release zip + 打 tag。
-2. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout(P0) → 写锁/writer 队列(P1) → 事务原子化(P2)。
-3. **v0.4.0 可选 online enrichment**：独立 `enrich()`，可关闭，不动 `query_ip`。
-4. 补齐 ThreatFox 真实实现（旁路）。
+1. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout(P0) → 写锁/writer 队列(P1) → 事务原子化(P2)。
+   注：v0.2.0 首次初始化向导已用**串行**下载规避空库并发写，但「全部更新」并发路径仍待根治。
+2. **v0.4.0 可选 online enrichment**：独立 `enrich()`，可关闭，不动 `query_ip`。
+3. 补齐 ThreatFox 真实实现（旁路）。
 
 ---
 

@@ -2,8 +2,8 @@
 
 > 每次发布/打 tag 前逐项确认。任一项不通过则**不发布**。
 
-> ⚠ **v0.2.0 Phase 1（`0.2.0-phase1`）是开发中 checkpoint，不是发布**：只 commit，**不打 tag、不发 GitHub Release**。
-> 正式发布 `0.2.0` 须等 Phase 2（首次运行向导 + 数据源选择下载 + 打包 Release zip）完成后再走本清单。
+> **v0.2.0 为正式发布**（Phase 1 Portable Runtime + Phase 2 首次初始化向导 / 数据源选择串行下载 / 打包 Release zip）。
+> 发布须逐项通过本清单；**不覆盖 v0.1.0 tag、不改仓库可见性**。
 
 ## A. 密钥与隐私
 - [ ] **无真实 key/token**：`git diff` 与 `git ls-files` 中不含真实密钥
@@ -17,7 +17,7 @@
 - [ ] 仓库体积合理（无意外的二进制/数据大文件混入）。
 
 ## C. 测试
-- [ ] `python tests/run_tests.py` → **95/95 passed, 0 failed**（或随版本递增后的全绿）。
+- [ ] `python tests/run_tests.py` → **110/110 passed, 0 failed**（或随版本递增后的全绿）。
 - [ ] 测试默认**零网络**、输出**无真实 key**。
 
 ## D. 入口可运行
@@ -36,8 +36,9 @@
 - [ ] 在正确分支上（功能不直接堆在 `main` 上，除非有意发布）。
 
 ## G. 已知风险确认
-- [ ] 若本次涉及更高并发/正式发布：确认 **v0.2.0 SQLite 写入串行化** 是否需先落地
-      （见 `docs/SQLITE_CONCURRENCY_AUDIT.md`）。否则在发布说明中标注「GUI 全部更新存在并发写风险，建议改用 `update.bat`」。
+- [ ] 若本次涉及更高并发：确认 **SQLite 写入串行化（v0.3.0）** 是否需先落地
+      （见 `docs/SQLITE_CONCURRENCY_AUDIT.md`）。v0.2.0 首次初始化向导已串行下载；但在发布说明中仍标注
+      「GUI『全部更新』存在并发写风险，建议改用数据初始化向导或 `update.bat`」。
 
 ---
 

@@ -57,7 +57,7 @@
 ## 4. 当前测试入口
 
 ```cmd
-python tests/run_tests.py            # 95 用例，无需 pytest
+python tests/run_tests.py            # 110 用例，无需 pytest
 python -m pytest                     # 等价
 ```
 默认零网络（HTTP 层 monkeypatch）；限速测试用临时 JSON + 注入时钟；输出无真实 key。
@@ -66,15 +66,16 @@ python -m pytest                     # 等价
 
 ## 5. 当前推荐下一步（路线优先级）
 
-> **当前进度**：v0.2.0 **Phase 1**（Portable Runtime + Key Settings + Data Directory Mode）已完成 checkpoint，
-> 版本标识 `0.2.0-phase1`，**未打 tag、未发 Release**。Portable 细节见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)。
+> **当前进度**：**v0.2.0 已完成**（Phase 1 Portable Runtime + Phase 2 首次初始化向导 / 数据源选择串行下载）。
+> 版本标识 `0.2.0`。Portable 细节见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)；
+> 首次初始化见 [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md)。
 
-1. **v0.2.0 Phase 2**（下一步）：首次运行向导 + 数据源选择下载（最小/推荐/完整/自定义）+ 打包 Release zip，完成后改正式 `0.2.0` 并打 tag / 发 Release。
-2. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout → 写锁或 writer queue →
+1. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout → 写锁或 writer queue →
    事务原子化 → 错误分类 → 压测。按 `docs/SQLITE_CONCURRENCY_TODO.md` 分步、每步独立可回滚。
-3. **v0.4.0 可选 online enrichment 接入 GUI**：独立 `enrich()` 模块，可关闭，不改 `query_ip`。
-4. **v0.5.0 Provider 状态页**；**v1.0.0 稳定版**。
-5. 旁路补全：**ThreatFox** 真实实现（参考 abuseipdb）。
+   注：v0.2.0 首次初始化向导已用串行下载规避空库并发写，但「全部更新」并发路径仍待根治。
+2. **v0.4.0 可选 online enrichment 接入 GUI**：独立 `enrich()` 模块，可关闭，不改 `query_ip`。
+3. **v0.5.0 Provider 状态页**；**v1.0.0 稳定版**。
+4. 旁路补全：**ThreatFox** 真实实现（参考 abuseipdb）。
 
 > 路线与 `README.md` / `ROADMAP.md` / `PROJECT_STATUS.md` 保持一致：v0.2.0=Portable（Phase1）+ 首次向导/数据源选择/发布包（Phase2），
 > v0.3.0=SQLite 串行化，v0.4.0=enrichment 接入 GUI，v0.5.0=Provider 状态页，v1.0.0=稳定版。
@@ -109,7 +110,8 @@ git diff | findstr /I "api_key token license_key"
 
 | commit | 说明 |
 |---|---|
-| `feat: add portable runtime and key settings` | 本轮（v0.2.0 Phase 1）：统一 `utils/paths.py` portable 路径系统；任意目录运行；首次运行自动建目录/模板；GUI key 设置 + 数据目录 portable/custom；模板与 `.bat` 去硬编码；测试增至 95 |
+| `feat: first-run setup wizard and data source download (v0.2.0 Phase 2)` | 本轮（v0.2.0 正式版）：`datasources/setup_profiles.py`（预设/自定义选择 + 缺 Key 门控 + 数据库状态检测 + **串行**下载执行器，可注入）；GUI `FirstRunSetupDialog`（首次缺库自动弹出、可关闭、进度/失败汇总）；版本号改 `0.2.0`；测试增至 110；新增 `docs/FIRST_RUN_SETUP.md` |
+| `feat: add portable runtime and key settings` | v0.2.0 Phase 1：统一 `utils/paths.py` portable 路径系统；任意目录运行；首次运行自动建目录/模板；GUI key 设置 + 数据目录 portable/custom；模板与 `.bat` 去硬编码；测试增至 95 |
 | `docs: finalize project handoff and sqlite concurrency audit` | 项目文档收尾 + SQLite 并发审计（只审计未改源码） |
 | `feat: add abuseipdb provider with rate limit safeguards` | AbuseIPDB 旁路实现；限速增强（per_day=900、连续 429 熔断）；测试增至 76 |
 | `feat: implement ip2location online provider in bypass mode` | ip2location 在线旁路实现 |

@@ -5,7 +5,31 @@
 
 ---
 
-## [0.2.0-phase1] - 2026-06-11 — Portable Runtime（开发中 checkpoint，未打 tag / 未发 Release）
+## [0.2.0] - 2026-06-11 — Portable Runtime + 首次初始化向导
+
+v0.2.0 正式版：在 Phase 1（Portable Runtime）基础上完成 Phase 2（首次初始化 / 数据源选择下载 / 打包发布）。
+本版本不新增 Provider、不接入在线 Provider 到主查询、不改 `query_ip`。
+
+### 首次初始化 / 数据源选择下载（Phase 2 新增）
+- 新增 `python/datasources/setup_profiles.py`：预设分组（最小 / 推荐 / 完整）+ 自定义逐源勾选；
+  解析选择时自动剔除缺 Key 的源（目前仅 geoip 依赖 `MAXMIND_LICENSE_KEY`），绝不读 key 明文。
+- **数据库状态检测**：缺库 **或** 空库（无任何成功落库的源）都判定为「需初始化」，供状态栏横幅与向导复用。
+- **串行下载执行器** `download_sources()`：逐个执行 `plugin.update()`（**绝不并发**），失败继续、最终汇总；
+  与 `do_update.py` 的串行 CLI 安全路径一致，规避空库并发写触发的 `database is locked`（见并发审计）。
+  执行器可注入，便于零网络测试；支持「下一个源开始前」协作式取消。
+- **GUI 数据初始化向导**（`FirstRunSetupDialog`）：选择方案 → 串行下载，展示每源进度 / 整体进度 /
+  成功失败汇总 / 缺 Key 跳过提示。首次运行（缺库/空库）自动弹出（可关闭、不强制、不阻断启动）；
+  「数据源」页新增「数据初始化…」按钮随时可再次打开；状态栏横幅指引入口。
+
+### 版本 / 测试 / 文档
+- 正式版本号 `0.2.0`（`VERSION` 与 `python/__init__.py` `__version__`）；GUI `APP_VERSION` 保持独立。
+- 测试增至 **110**（新增 `test_setup_profiles`：预设关系 / key 门控 / 选择顺序 / 串行编排 / 失败汇总 / 取消 / 库状态检测，零网络）。
+- 新增 `docs/FIRST_RUN_SETUP.md`；更新 README / ROADMAP / PROJECT_STATUS。
+- 打包 portable zip 并发布 v0.2.0 Release（不覆盖 v0.1.0；不改仓库可见性）。
+
+> 以下 Phase 1 内容已并入 v0.2.0：
+
+## [0.2.0-phase1] - 2026-06-11 — Portable Runtime（Phase 1 checkpoint，已并入 0.2.0）
 
 v0.2.0 开发的**第一个 checkpoint**：让 NetworkIntel 从锁定 `E:\NetworkIntel` 变成真正支持任意目录运行的 portable 软件。**只 commit，不 tag，不 Release。**
 
@@ -29,7 +53,7 @@ v0.2.0 开发的**第一个 checkpoint**：让 NetworkIntel 从锁定 `E:\Networ
 - 测试增至 **95**（新增 `test_paths` / `test_portable_init` / `test_env_key_storage` / `test_data_dir_mode`）。
 - 新增 `docs/PORTABLE_MODE.md`。
 
-### 留待 v0.2.0 Phase 2
+### 留待 v0.2.0 Phase 2（已在上方 0.2.0 完成）
 - 首次运行向导、数据源选择下载（最小/推荐/完整/自定义）、打包 Release zip、改正式 `0.2.0` 并打 tag / 发 Release。
 
 ---

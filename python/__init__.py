@@ -4,4 +4,4 @@
 # python/CHANGELOG.md），二者是不同的版本轴：
 #   __version__   —— 项目公开发布版本（GitHub release / tag）
 #   APP_VERSION   —— GUI 界面自有版本（独立 changelog）
-__version__ = "0.2.0-phase1"
+__version__ = "0.2.0"

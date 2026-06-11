@@ -1,13 +1,15 @@
 # NetworkIntel 本地离线IP情报平台
 
-> **公开版本：v0.1.0** · **开发中：v0.2.0 Phase 1 checkpoint（`0.2.0-phase1`）**
+> **公开版本：v0.2.0**
 > 离线查IP，全可视化界面，Windows原生部署，无需Docker
 
-> 🧳 **v0.2.0 Phase 1 起支持任意目录运行（Portable）**：不再锁定 `E:\NetworkIntel`，
-> 解压到任意文件夹即可运行；首次运行自动创建目录与配置模板；可在 GUI 设置页填写 key 并选择数据目录模式。
+> 🧳 **任意目录运行（Portable）**：不再锁定 `E:\NetworkIntel`，解压到任意文件夹即可运行；
+> 首次运行自动创建目录与配置模板；可在 GUI 设置页填写 key 并选择数据目录模式。
 > 详见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)。本文中出现的 `E:\NetworkIntel` 仅为**示例路径**，可替换为任意目录。
 >
-> Phase 1 仅实现 Portable Runtime / Key Settings / Data Directory Mode；**首次运行向导、数据源选择下载、打包 Release 属于 Phase 2**，本 checkpoint 未打 tag、未发 Release。
+> 🚀 **首次初始化向导（v0.2.0）**：首次启动检测到缺库/空库时，会弹出「数据初始化」向导，
+> 提供 **最小 / 推荐 / 完整 / 自定义** 四种方案，**串行**下载所选数据源并展示进度与失败汇总。
+> 也可随时在「数据源」页点击「数据初始化…」重新打开。详见 [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md)。
 
 ---
 
@@ -45,7 +47,8 @@
 | [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md) | 发布前检查清单 |
 | [`CLAUDE_HANDOFF.md`](CLAUDE_HANDOFF.md) | 给后续 AI/人接手的红线与交接说明 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 项目规范化变更记录 |
-| [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md) | Portable 运行模式 / 数据目录模式 / 首次运行初始化（v0.2.0 Phase 1） |
+| [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md) | Portable 运行模式 / 数据目录模式 / 首次运行初始化（v0.2.0） |
+| [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md) | 首次初始化向导 / 数据源选择下载（最小·推荐·完整·自定义，v0.2.0） |
 | [`docs/ONLINE_PROVIDERS.md`](docs/ONLINE_PROVIDERS.md) | 在线 Provider 说明 |
 | [`docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`](docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md) | 缓存 / 限速 / 熔断设计 |
 | [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md) | SQLite 并发写入审计 |
@@ -527,26 +530,26 @@ key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存
 
 ---
 
-## 已知限制（v0.1.0）
+## 已知限制（v0.2.0）
 
-- **数据库不随源码发布**：克隆后需自行运行 `update.bat` 首次联网下载（之后查询全程离线）。
+- **数据库不随源码/发布包发布**：首次使用需联网下载（之后查询全程离线）。推荐用 GUI 的
+  **数据初始化向导**（「数据源」页 →「数据初始化…」），或命令行 `update.bat`（串行更新）。
 - **API key 需用户自行配置**：在线 Provider（ipinfo / ip2location / AbuseIPDB）需在 `.env` 填入各自 key；
   离线查询本身不需要任何在线 key（仅 GeoIP 下载需 MaxMind Key）。
-- **SQLite 并发写入风险已审计但 v0.1.0 未修复**：GUI/调度器「全部更新」会并发写库，可能偶发
-  `database is locked`（随机源 status=error）。**规避：改用 `update.bat`（串行更新）**。
-  详见 [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)，修复列入后续路线。
+- **SQLite 并发写入风险已审计但尚未修复**：GUI/调度器「全部更新」会并发写库，可能偶发
+  `database is locked`（随机源 status=error）。**规避：用数据初始化向导（串行下载）或 `update.bat`（串行更新）**。
+  并发串行化修复列入 v0.3.0。详见 [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)。
 - **在线 Provider 不接入 `query_ip` 主流程**：在线能力仅旁路，离线主查询不依赖任何外部网络。
 
 ---
 
 ## 后续路线
 
-当前公开版本 **v0.1.0**。后续规划（轻量、可能调整，见 [`ROADMAP.md`](ROADMAP.md)）：
+当前公开版本 **v0.2.0**。后续规划（轻量、可能调整，见 [`ROADMAP.md`](ROADMAP.md)）：
 
-- **v0.2.0** SQLite 写入串行化（busy_timeout → 写锁或 writer queue → 事务原子化）
-- **v0.3.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）
-- **v0.4.0** GUI 状态页：Provider 状态 / 缓存与限速状态展示
-- **v0.5.0** 发布包 / 数据分离
+- **v0.3.0** SQLite 写入串行化（busy_timeout → 写锁或 writer queue → 事务原子化）
+- **v0.4.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）
+- **v0.5.0** GUI 状态页：Provider 状态 / 缓存与限速状态展示
 - **v1.0.0** 稳定版
 
 ---
@@ -559,7 +562,7 @@ python -m pytest                     # 若已安装 pytest
 python scripts/provider_smoke_test.py                 # Provider 自检（默认不联网）
 python scripts/provider_smoke_test.py --rate-limit-status
 ```
-- 当前 **76 个测试，默认零网络**（HTTP 层用 monkeypatch 注入模拟响应）。
+- 当前 **110 个测试，默认零网络**（HTTP 层用 monkeypatch 注入模拟响应）。
 - 测试只读 `*.example.*` 模板，断言无真实 key；不读真实 `.env`。
 - 详见 [`docs/TESTING.md`](docs/TESTING.md)。
 
@@ -582,4 +585,4 @@ python scripts/provider_smoke_test.py --rate-limit-status
 
 ---
 
-*NetworkIntel v0.1.0 · 数据仅供参考，不构成任何安全建议*
+*NetworkIntel v0.2.0 · 数据仅供参考，不构成任何安全建议*

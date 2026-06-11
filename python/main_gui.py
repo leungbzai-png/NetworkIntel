@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox,
     QProgressBar, QListWidget, QListWidgetItem, QSplitter, QSizePolicy,
     QScrollArea, QGridLayout, QComboBox, QCheckBox, QStyleFactory,
-    QAbstractItemView, QSpacerItem, QToolButton, QTabWidget
+    QAbstractItemView, QSpacerItem, QToolButton, QTabWidget,
+    QDialog, QRadioButton, QButtonGroup
 )
 
 # ── 后端接口 ──────────────────────────────────────────────────
@@ -48,6 +49,7 @@ try:
     from utils.config_loader import get_config, reload_config
     from utils.schema import get_connection
     from utils.ip_utils import get_ip_version, normalize_ip
+    from datasources import setup_profiles
     BACKEND_OK = True
     BACKEND_ERR = ""
 except Exception as e:
@@ -1062,13 +1064,25 @@ class SourcesPage(QWidget):
         bar = QHBoxLayout()
         self.btn_refresh = QPushButton("刷新")
         self.btn_refresh.clicked.connect(self.refresh)
+        self.btn_setup = QPushButton("数据初始化…")
+        self.btn_setup.setToolTip("选择数据源并串行下载（首次使用 / 重建数据库）")
+        self.btn_setup.clicked.connect(self._open_setup)
         self.btn_update_all = QPushButton("全部更新")
         self.btn_update_all.setObjectName("Primary")
         self.btn_update_all.clicked.connect(self._update_all)
         bar.addWidget(self.btn_refresh)
+        bar.addWidget(self.btn_setup)
         bar.addStretch(1)
         bar.addWidget(self.btn_update_all)
         root.addLayout(bar)
+
+    def _open_setup(self):
+        try:
+            dlg = FirstRunSetupDialog(self.window())
+            dlg.exec()
+            self.refresh()
+        except Exception as e:
+            QMessageBox.critical(self, "无法打开数据初始化", str(e))
 
         # 表
         self.table = QTableWidget(0, 7)
@@ -1638,6 +1652,291 @@ class SettingsPage(QWidget):
 
 
 # ╔════════════════════════════════════════════════════════════╗
+# ║              首次初始化 / 数据源选择下载（Phase 2）        ║
+# ╚════════════════════════════════════════════════════════════╝
+
+class SetupDownloadWorker(QThread):
+    """
+    后台串行下载工作线程。
+    复用 datasources.setup_profiles.download_sources（逐个执行，绝不并发，
+    与 do_update.py 的串行 CLI 路径一致，规避空库并发写的 database is locked 风险）。
+    """
+    progress = Signal(dict)   # 转发 download_sources 的 event
+    finished_summary = Signal(dict)
+
+    def __init__(self, names: list, parent=None):
+        super().__init__(parent)
+        self._names = list(names)
+        self._cancel = False
+
+    def cancel(self):
+        self._cancel = True
+
+    def run(self):
+        try:
+            summary = setup_profiles.download_sources(
+                self._names,
+                on_progress=lambda ev: self.progress.emit(ev),
+                should_cancel=lambda: self._cancel,
+            )
+        except Exception as e:  # 兜底，绝不让线程崩溃
+            summary = {"total": len(self._names), "ok": 0,
+                       "failed": len(self._names), "cancelled": False,
+                       "results": [], "error": str(e)}
+        self.finished_summary.emit(summary)
+
+
+class FirstRunSetupDialog(QDialog):
+    """
+    数据初始化向导：选择数据源（最小/推荐/完整/自定义）并串行下载。
+    可随时关闭（「稍后」）；不强制、不阻断程序使用。
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("数据初始化 / 数据源下载")
+        self.setMinimumSize(640, 600)
+        self.worker: "SetupDownloadWorker | None" = None
+        self._available_keys = setup_profiles.configured_keys()
+        self._custom_checks: dict[str, QCheckBox] = {}
+        self._build()
+        self._refresh_summary()
+
+    # ── UI ──
+    def _build(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 18)
+        root.setSpacing(12)
+
+        title = QLabel("数据初始化")
+        title.setObjectName("PageTitle")
+        root.addWidget(title)
+        intro = QLabel(
+            "选择要下载的离线数据源。下载将**逐个串行**执行（避免并发写库冲突），"
+            "可能耗时较长，失败的源会跳过并在结尾汇总。\n"
+            "geoip 需要 MaxMind Key —— 未配置时会自动跳过，可稍后在设置页填写后再下载。")
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color:#6B7280; font-size:12px;")
+        root.addWidget(intro)
+
+        # 预设单选
+        self.btn_group = QButtonGroup(self)
+        self.radios: dict[str, QRadioButton] = {}
+        rc, rl = make_card("下载方案", self)
+        for key in (*setup_profiles.PROFILE_ORDER, "custom"):
+            rb = QRadioButton(
+                f"{setup_profiles.PROFILE_LABELS[key]} — "
+                f"{setup_profiles.PROFILE_DESCRIPTIONS[key]}")
+            rb.toggled.connect(self._on_profile_toggle)
+            self.btn_group.addButton(rb)
+            self.radios[key] = rb
+            rl.addWidget(rb)
+        root.addWidget(rc)
+
+        # 自定义勾选区（默认隐藏）
+        self.custom_card, ccl = make_card("自定义数据源", self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMaximumHeight(220)
+        holder = QWidget()
+        hl = QVBoxLayout(holder)
+        hl.setSpacing(4)
+        for item in setup_profiles.source_catalog():
+            name = item["name"]
+            label = name
+            if item["description"]:
+                label += f" — {item['description']}"
+            cb = QCheckBox(label)
+            cb.setChecked(item["in_recommended"])
+            req = item["requires_key"]
+            if req and req not in self._available_keys:
+                cb.setChecked(False)
+                cb.setEnabled(False)
+                cb.setText(label + f"  （需要 {req}，请先在设置页填写）")
+            cb.toggled.connect(self._refresh_summary)
+            self._custom_checks[name] = cb
+            hl.addWidget(cb)
+        hl.addStretch(1)
+        scroll.setWidget(holder)
+        ccl.addWidget(scroll)
+        self.custom_card.setVisible(False)
+        root.addWidget(self.custom_card)
+
+        # 摘要
+        self.summary_label = QLabel("")
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setStyleSheet("color:#374151; font-size:12px;")
+        root.addWidget(self.summary_label)
+
+        # 进度区（默认隐藏）
+        self.progress_box = QWidget()
+        pv = QVBoxLayout(self.progress_box)
+        pv.setContentsMargins(0, 0, 0, 0)
+        pv.setSpacing(6)
+        self.overall_label = QLabel("准备中…")
+        self.overall_label.setStyleSheet("font-size:12px; color:#374151;")
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.current_label = QLabel("")
+        self.current_label.setStyleSheet("font-size:11px; color:#6B7280;")
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumHeight(160)
+        pv.addWidget(self.overall_label)
+        pv.addWidget(self.progress_bar)
+        pv.addWidget(self.current_label)
+        pv.addWidget(self.log)
+        self.progress_box.setVisible(False)
+        root.addWidget(self.progress_box, 1)
+
+        # 按钮栏
+        bar = QHBoxLayout()
+        self.btn_start = QPushButton("开始下载")
+        self.btn_start.setObjectName("Primary")
+        self.btn_start.clicked.connect(self._start)
+        self.btn_cancel = QPushButton("取消下载")
+        self.btn_cancel.clicked.connect(self._cancel)
+        self.btn_cancel.setVisible(False)
+        self.btn_close = QPushButton("稍后")
+        self.btn_close.clicked.connect(self.reject)
+        bar.addStretch(1)
+        bar.addWidget(self.btn_cancel)
+        bar.addWidget(self.btn_close)
+        bar.addWidget(self.btn_start)
+        root.addLayout(bar)
+
+        # 默认方案：全部子控件就绪后再勾选，避免 toggled 提前触发空引用
+        self.radios["recommended"].setChecked(True)
+
+    # ── 选择逻辑 ──
+    def _current_profile(self) -> str:
+        for key, rb in self.radios.items():
+            if rb.isChecked():
+                return key
+        return "recommended"
+
+    def _selection(self) -> dict:
+        profile = self._current_profile()
+        custom = None
+        if profile == "custom":
+            custom = [n for n, cb in self._custom_checks.items() if cb.isChecked()]
+        return setup_profiles.resolve_selection(
+            profile, custom=custom, available_keys=self._available_keys)
+
+    def _on_profile_toggle(self):
+        if not hasattr(self, "custom_card"):
+            return  # 构建期间提前触发，忽略
+        self.custom_card.setVisible(self._current_profile() == "custom")
+        self._refresh_summary()
+
+    def _refresh_summary(self):
+        sel = self._selection()
+        n = len(sel["selected"])
+        parts = [f"将下载 <b>{n}</b> 个数据源"]
+        if sel["selected"]:
+            parts.append("：" + "、".join(sel["selected"]))
+        text = "".join(parts)
+        if sel["skipped"]:
+            names = "、".join(s["name"] for s in sel["skipped"])
+            text += (f"<br><span style='color:#D97706;'>跳过（缺 Key）：{names}</span>")
+        if n == 0:
+            text = "<span style='color:#DC2626;'>未选择任何可下载的数据源。</span>"
+        self.summary_label.setTextFormat(Qt.RichText)
+        self.summary_label.setText(text)
+        if self.worker is None or not self.worker.isRunning():
+            self.btn_start.setEnabled(n > 0)
+
+    # ── 下载流程 ──
+    def _start(self):
+        sel = self._selection()
+        names = sel["selected"]
+        if not names:
+            QMessageBox.warning(self, "未选择", "请至少选择一个可下载的数据源。")
+            return
+        msg = f"即将串行下载 {len(names)} 个数据源：\n\n" + "、".join(names)
+        if sel["skipped"]:
+            msg += "\n\n跳过（缺 Key）：" + "、".join(s["name"] for s in sel["skipped"])
+        msg += "\n\n确认开始？"
+        if QMessageBox.question(self, "确认下载", msg,
+                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+
+        # 锁定选择 UI，展示进度
+        for rb in self.radios.values():
+            rb.setEnabled(False)
+        self.custom_card.setEnabled(False)
+        self.btn_start.setVisible(False)
+        self.btn_close.setEnabled(False)
+        self.btn_cancel.setVisible(True)
+        self.progress_box.setVisible(True)
+        self._total = len(names)
+        self._done = 0
+        self.progress_bar.setValue(0)
+        self.overall_label.setText(f"0 / {self._total} 完成")
+        self.log.clear()
+
+        self.worker = SetupDownloadWorker(names, self)
+        self.worker.progress.connect(self._on_progress)
+        self.worker.finished_summary.connect(self._on_finished)
+        self.worker.start()
+
+    def _cancel(self):
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
+            self.btn_cancel.setEnabled(False)
+            self.current_label.setText("已请求取消，等待当前数据源完成…")
+
+    def _on_progress(self, ev: dict):
+        phase = ev.get("phase")
+        if phase == "source_start":
+            self.current_label.setText(f"开始：{ev['name']} …")
+        elif phase == "source_progress":
+            self.current_label.setText(
+                f"{ev['name']}：{ev.get('step', '')} ({ev.get('pct', 0)}%)")
+        elif phase == "source_done":
+            self._done += 1
+            r = ev["result"]
+            if r["success"]:
+                self.log.appendPlainText(
+                    f"[OK]   {r['name']}  ·  {r['record_count']:,} 条")
+            else:
+                self.log.appendPlainText(
+                    f"[FAIL] {r['name']}  ·  {r.get('error') or '未知错误'}")
+            pct = int(self._done / max(1, self._total) * 100)
+            self.progress_bar.setValue(pct)
+            self.overall_label.setText(f"{self._done} / {self._total} 完成")
+
+    def _on_finished(self, summary: dict):
+        self.btn_cancel.setVisible(False)
+        self.btn_close.setEnabled(True)
+        self.btn_close.setText("完成")
+        self.current_label.setText("")
+        if summary.get("error"):
+            self.log.appendPlainText(f"[异常] {summary['error']}")
+        tail = "（已取消剩余）" if summary.get("cancelled") else ""
+        self.overall_label.setText(
+            f"完成：成功 {summary['ok']}，失败 {summary['failed']}，"
+            f"共 {summary['total']} {tail}")
+        # 通知主窗口刷新状态
+        p = self.parent()
+        if p is not None and hasattr(p, "refresh_after_setup"):
+            try:
+                p.refresh_after_setup()
+            except Exception:
+                pass
+
+    def closeEvent(self, ev):
+        if self.worker and self.worker.isRunning():
+            if QMessageBox.question(
+                self, "下载进行中", "下载仍在进行，确定关闭？\n（当前数据源会继续完成，但不再下载后续源）",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+                ev.ignore()
+                return
+            self.worker.cancel()
+        ev.accept()
+
+
+# ╔════════════════════════════════════════════════════════════╗
 # ║                        主窗口                              ║
 # ╚════════════════════════════════════════════════════════════╝
 
@@ -1660,6 +1959,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 600)
 
         self._theme_mode = "system"  # system / light / dark
+        self._needs_setup = False
+        self._setup_prompted = False
         self._build_ui()
         self._apply_theme()
 
@@ -1670,6 +1971,10 @@ class MainWindow(QMainWindow):
                 sched.start()
             except Exception as e:
                 print("[scheduler.start]", e)
+
+        # 首次运行：缺库/空库时主动弹出数据初始化向导（可关闭，不强制）
+        if BACKEND_OK and getattr(self, "_needs_setup", False):
+            QTimer.singleShot(700, self._maybe_prompt_setup)
 
     # ────── UI ──────
     def _build_ui(self):
@@ -1760,14 +2065,14 @@ class MainWindow(QMainWindow):
             self.status_text.setStyleSheet("color:#DC2626;")
         else:
             map_info = "" if MAP_OK else "  ·  地图不可用"
-            db_missing = False
+            self._needs_setup = False
             try:
-                db_missing = not Path(get_config().db_path).exists()
+                self._needs_setup = setup_profiles.needs_setup(get_config().db_path)
             except Exception:
                 pass
-            if db_missing:
+            if self._needs_setup:
                 self.status_text = QLabel(
-                    "⚠ 数据库未初始化，请在设置页填写 MaxMind Key 后运行更新")
+                    "⚠ 数据库未初始化 · 请到「数据源」页点击「数据初始化…」选择并下载数据源")
                 self.status_text.setStyleSheet("color:#D97706;")
             else:
                 self.status_text = QLabel(f"就绪 · 调度器已启动{map_info}")
@@ -1793,6 +2098,36 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(idx)
         for i, b in enumerate(self.nav_buttons):
             b.setChecked(i == idx)
+
+    def _maybe_prompt_setup(self):
+        """首次运行时弹出数据初始化向导（仅一次，可被用户关闭）。"""
+        if self._setup_prompted:
+            return
+        self._setup_prompted = True
+        try:
+            dlg = FirstRunSetupDialog(self)
+            dlg.exec()
+            self.refresh_after_setup()
+        except Exception as e:
+            print("[first-run setup]", e)
+
+    def refresh_after_setup(self):
+        """数据下载/初始化后刷新状态栏与数据源页。"""
+        try:
+            self._needs_setup = setup_profiles.needs_setup(get_config().db_path)
+        except Exception:
+            self._needs_setup = False
+        try:
+            if not self._needs_setup:
+                map_info = "" if MAP_OK else "  ·  地图不可用"
+                self.status_text.setText(f"就绪 · 调度器已启动{map_info}")
+                self.status_text.setStyleSheet("")
+        except Exception:
+            pass
+        try:
+            self.page_sources.refresh()
+        except Exception:
+            pass
 
     def _placeholder_page(self, title: str, msg: str) -> QWidget:
         w = QWidget()
