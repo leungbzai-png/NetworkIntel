@@ -14,7 +14,14 @@
 | `abuseipdb` | 威胁情报 | 是 | 🧩 骨架 | `ABUSEIPDB_API_KEY` |
 | `threatfox` | 威胁情报 | 是 | 🧩 骨架 | `THREATFOX_API_KEY` |
 
-> 缓存 / 限速 / 离线降级的设计见 `docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`（合并进主查询前的前置条件）。
+> 缓存 / 限速 / 离线降级的设计与实现见 `docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`。
+
+### 旁路执行器（缓存 + 限速，已落地）
+- `python/providers/online_runner.py::run_provider(name, ip, force_refresh=False, use_cache=True)`
+- 顺序：允许列表（默认 `bgpview`/`ipinfo`）→ `validate_config()` → 限速 `can_call()` → 查缓存 → 未命中才 `query()` → 写缓存。
+- 缓存：独立 `cache/online_cache.sqlite`（不碰 `intel.db`）；限速：`cache/online_ratelimit.json`，429 进入冷却。
+- **仍未接入 `query_ip`**：只能显式调用或经 smoke 脚本。
+- 清理缓存：`python scripts/provider_smoke_test.py --purge-cache` / `--cache-stats`。
 
 ### ipinfo 使用
 - 配置：在 `.env` 设 `IPINFO_TOKEN=...`（gitignored；token 经 `Authorization: Bearer` 头发送，不进 URL/日志）。

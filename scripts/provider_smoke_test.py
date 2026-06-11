@@ -39,10 +39,13 @@ def _hr(title: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="NetworkIntel provider 自检")
-    ap.add_argument("--query", default="8.8.8.8", help="查询的 IP（默认 8.8.8.8）")
+    ap.add_argument("--query", default=None,
+                    help="要查询的 IP。仅在显式提供时才发起在线请求（经缓存+限速旁路执行器）。")
     ap.add_argument("--provider", default="bgpview",
-                    help="实测的在线 provider（默认 bgpview，无需 key）。"
-                         "指定 ipinfo 等需 key 的 provider 时，仅在已配置 key 时才发起请求。")
+                    help="在线 provider（默认 bgpview，无需 key）。需 key 者仅在已配置时才请求。")
+    ap.add_argument("--force-refresh", action="store_true", help="绕过缓存强制回源")
+    ap.add_argument("--cache-stats", action="store_true", help="打印在线缓存统计")
+    ap.add_argument("--purge-cache", action="store_true", help="清理已过期缓存条目")
     ap.add_argument("--no-network", action="store_true", help="不发任何网络请求")
     args = ap.parse_args()
 
@@ -74,42 +77,51 @@ def main() -> int:
         keyflag = "需要KEY" if p.requires_api_key else "无需KEY"
         print(f"  {p.name:<14} {p.category.value:<13} {keyflag:<8} {impl:<6} 配置:{status}")
 
-    # ── 实测查询（仅指定的在线 provider）──────────────────
-    from providers.online import get_online_provider, IMPLEMENTED
-    name = args.provider
-    _hr(f"在线实测: provider={name}  query={args.query}")
+    # ── 缓存维护 ───────────────────────────────────────────
+    if args.cache_stats or args.purge_cache:
+        _hr("在线缓存")
+        try:
+            from providers.cache import OnlineCache
+            c = OnlineCache()
+            if args.purge_cache:
+                print(f"  已清理过期条目: {c.purge_expired()} 条")
+            if args.cache_stats:
+                s = c.stats()
+                print(f"  db_path : {s.get('db_path')}")
+                print(f"  total   : {s.get('total')}  expired: {s.get('expired')}")
+                print(f"  by_provider: {s.get('by_provider')}")
+        except Exception as e:
+            print(f"  [错误] {type(e).__name__}: {e}")
 
+    # ── 实测查询（仅在显式 --query 时；经缓存+限速旁路执行器）──
+    if args.query is None:
+        _hr("在线实测")
+        print("  未指定 --query，跳过在线请求（默认不联网）。")
+        print("  示例: python scripts/provider_smoke_test.py --provider bgpview --query 8.8.8.8")
+        print("\n完成。")
+        return 0
+
+    name = args.provider
+    _hr(f"在线实测: provider={name}  query={args.query}  force_refresh={args.force_refresh}")
     if args.no_network:
         print("  已跳过（--no-network）")
         return 0
 
-    p = get_online_provider(name)
-    if p is None:
-        print(f"  [跳过] 未知 provider: {name}")
-        return 0
-
-    # 需要 key 的 provider：仅在已配置 key 时才请求；否则清晰提示，不崩溃
-    if p.requires_api_key:
-        v = p.validate_config()
-        if not v.ok:
-            print(f"  [跳过] {name} 需要 API key 但未配置（{','.join(v.missing)}）。")
-            print(f"         请在 .env 设置后重试（key 不会被打印）。")
-            return 0
-    if name not in IMPLEMENTED:
-        print(f"  [跳过] {name} 仍是骨架（query 未实现）。")
-        return 0
-
     try:
-        res = p.query(args.query)
+        from providers.online_runner import run_provider
+        res = run_provider(name, args.query, force_refresh=args.force_refresh)
     except Exception as e:
         print(f"  [异常] {type(e).__name__}: {e}")
         return 1
 
-    if res.error:
-        print(f"  查询失败: {res.error}")
+    if not res.ok:
+        # 缺 key / 限速 / 网络失败均在此优雅呈现（不含 token）
+        print(f"  未返回结果: {res.error}")
+        print("\n完成。")
         return 0
 
     d = res.data
+    print(f"  来源      : {'缓存' if res.from_cache else '实时回源'}")
     if name == "bgpview":
         print(f"  IP        : {d.get('ip')}")
         print(f"  ASN       : AS{d.get('asn')}  {d.get('asn_name')}")

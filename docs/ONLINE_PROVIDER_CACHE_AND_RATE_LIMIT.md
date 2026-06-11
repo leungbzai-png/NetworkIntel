@@ -1,6 +1,51 @@
 # 在线 Provider 缓存与限速设计（ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md）
 
-> 设计文档。**当前不实现复杂缓存**；用于指导后续把在线 provider 安全地合并进查询能力。
+> 设计文档 + **基础设施已落地**（旁路，未接入 `query_ip`）。
+
+## 0. 实现状态（基础设施已落地，仍为旁路）
+
+| 模块 | 文件 | 说明 |
+|---|---|---|
+| 缓存 | `python/providers/cache.py` | 独立 SQLite（`cache/online_cache.sqlite`），表 `online_cache`，不碰 `intel.db` |
+| 限速 | `python/providers/ratelimit.py` | 按 provider 维度，JSON 持久化（`cache/online_ratelimit.json`），429 冷却 |
+| 执行器 | `python/providers/online_runner.py` | 旁路编排：允许列表→validate→限速→缓存→query→写缓存 |
+| 测试 | `tests/test_provider_cache.py` / `test_provider_ratelimit.py` / `test_online_runner.py` | 默认零网络 |
+
+> 仍**未**接入 `query_ip` / GUI / scheduler；只能经 `online_runner.run_provider()` 或 smoke 脚本显式调用。
+
+### online_cache 表结构
+```sql
+CREATE TABLE IF NOT EXISTS online_cache (
+    provider        TEXT NOT NULL,
+    query_type      TEXT NOT NULL,   -- 目前固定 'ip'
+    query_value     TEXT NOT NULL,
+    normalized_json TEXT,            -- NormalizedResult.data（无 token）
+    raw_json        TEXT,            -- API 原始响应（无 token）
+    fetched_at      TEXT NOT NULL,   -- ISO8601
+    expires_at      REAL,            -- epoch 秒；NULL=永不过期
+    status          TEXT,            -- ok / error
+    error           TEXT,
+    PRIMARY KEY (provider, query_type, query_value)
+);
+```
+
+### 如何清理缓存
+```
+python scripts/provider_smoke_test.py --purge-cache    # 删除过期条目
+python scripts/provider_smoke_test.py --cache-stats    # 查看统计
+# 或直接删除文件： cache/online_cache.sqlite（下次自动重建）
+```
+
+### 如何手动测试
+```
+python scripts/provider_smoke_test.py                                   # 仅列表，不联网
+python scripts/provider_smoke_test.py --provider bgpview --query 8.8.8.8 # 经缓存+限速回源
+python scripts/provider_smoke_test.py --provider bgpview --query 8.8.8.8 --force-refresh
+```
+
+---
+
+> 以下为原始设计说明，指导后续把在线 provider 安全地合并进查询能力。
 
 ---
 

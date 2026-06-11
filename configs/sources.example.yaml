@@ -146,8 +146,20 @@ sources:
 # ─────────────────────────────────────────────────────────────
 # 在线查询 Provider（旁路能力，默认 enabled:false，未接入 query_ip 离线主流程）
 # 真实密钥写入 .env（gitignored），此处只放 ${VAR} 占位符。
-# 详见 docs/ONLINE_PROVIDERS.md
+# 缓存/限速参数实际从 .env 读取（见 .env.example），此处仅作文档参考。
+# 详见 docs/ONLINE_PROVIDERS.md / docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md
 # ─────────────────────────────────────────────────────────────
+online_settings:
+  online_providers_enabled: false        # 是否参与（未来 query_ip enrichment 开关）
+  online_cache_enabled: true             # 旁路结果缓存
+  online_cache_db_path: cache/online_cache.sqlite   # 独立 SQLite，不碰 intel.db
+  online_rate_limit_enabled: true        # 按 provider 限速 + 429 冷却
+  online_provider_timeout: 10            # 秒
+  ttl_days:
+    bgpview: 30                          # ASN/BGP：7-30 天
+    ipinfo: 14                           # GeoIP：7-30 天
+    # threat_intel: 0.25 (=6h)           # 威胁类：1-24 小时
+
 online_providers:
   bgpview:
     enabled: false
