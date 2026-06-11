@@ -153,12 +153,21 @@ online_settings:
   online_providers_enabled: false        # 是否参与（未来 query_ip enrichment 开关）
   online_cache_enabled: true             # 旁路结果缓存
   online_cache_db_path: cache/online_cache.sqlite   # 独立 SQLite，不碰 intel.db
-  online_rate_limit_enabled: true        # 按 provider 限速 + 429 冷却
+  online_rate_limit_enabled: true        # 按 provider 限速 + 429 冷却 + 连续 429 熔断
   online_provider_timeout: 10            # 秒
+  online_max_consecutive_429: 3          # 连续 429 达到该值进入熔断
+  online_circuit_breaker_seconds: 3600   # 熔断持续时间（秒）
   ttl_days:
     bgpview: 30                          # ASN/BGP：7-30 天
     ipinfo: 14                           # GeoIP：7-30 天
-    # threat_intel: 0.25 (=6h)           # 威胁类：1-24 小时
+    abuseipdb: 0.25                      # 威胁类：6 小时（=ABUSEIPDB_CACHE_TTL_HOURS）
+  # per-provider 默认限速（实际从 ratelimit.DEFAULT_PROVIDER_LIMITS / .env 读取，此处仅文档参考）
+  rate_limits:
+    bgpview:     { per_minute: 30, per_hour: 1000, per_day: null }
+    ipinfo:      { per_minute: 30, per_hour: 500,  per_day: null }
+    ip2location: { per_minute: 30, per_hour: 500,  per_day: null }
+    abuseipdb:   { per_minute: 10, per_hour: 100,  per_day: 900 }   # 免费额度保护
+    threatfox:   { per_minute: 30, per_hour: 500,  per_day: null }
 
 online_providers:
   bgpview:
@@ -190,8 +199,9 @@ online_providers:
     category: threat_intel
     requires_api_key: true
     api_key: ${ABUSEIPDB_API_KEY}
-    description: AbuseIPDB 威胁在线查询（免费约 1000/天）
+    description: AbuseIPDB 威胁在线查询（免费约 1000/天，默认 per_day=900 留余量）
     rate_limit: { max_calls: 1000, period_seconds: 86400 }
+    cache_ttl_hours: 6                    # 威胁类 TTL 较短
     timeout: 15
   threatfox:
     enabled: false

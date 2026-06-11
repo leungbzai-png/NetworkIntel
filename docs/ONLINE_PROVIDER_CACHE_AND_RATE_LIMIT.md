@@ -7,8 +7,8 @@
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | 缓存 | `python/providers/cache.py` | 独立 SQLite（`cache/online_cache.sqlite`），表 `online_cache`，不碰 `intel.db` |
-| 限速 | `python/providers/ratelimit.py` | 按 provider 维度，JSON 持久化（`cache/online_ratelimit.json`），429 冷却 |
-| 执行器 | `python/providers/online_runner.py` | 旁路编排：允许列表→validate→限速→缓存→query→写缓存 |
+| 限速 | `python/providers/ratelimit.py` | 按 provider 维度（per_minute/hour/day）+ 429 冷却 + **连续 429 熔断**；JSON 持久化（`cache/online_ratelimit.json`） |
+| 执行器 | `python/providers/online_runner.py` | 旁路编排：允许列表→validate→**缓存→限速/熔断**→query→写缓存 |
 | 测试 | `tests/test_provider_cache.py` / `test_provider_ratelimit.py` / `test_online_runner.py` | 默认零网络 |
 
 > 仍**未**接入 `query_ip` / GUI / scheduler；只能经 `online_runner.run_provider()` 或 smoke 脚本显式调用。
@@ -41,7 +41,47 @@ python scripts/provider_smoke_test.py --cache-stats    # 查看统计
 python scripts/provider_smoke_test.py                                   # 仅列表，不联网
 python scripts/provider_smoke_test.py --provider bgpview --query 8.8.8.8 # 经缓存+限速回源
 python scripts/provider_smoke_test.py --provider bgpview --query 8.8.8.8 --force-refresh
+python scripts/provider_smoke_test.py --rate-limit-status               # 查看各 provider 限速/熔断
+python scripts/provider_smoke_test.py --simulate-429 abuseipdb          # 本地模拟连续 429 → 熔断（不联网）
+python scripts/provider_smoke_test.py --reset-rate-limit abuseipdb      # 重置某 provider 限速状态
 ```
+
+---
+
+## 0.1 per-provider 限速护栏（已落地）
+
+`ratelimit.RateLimiter` 纯配置驱动；`build_default_limiter()`（runner/smoke 共用）注入以下默认额度
+（保守，保护免费额度；可经 `.env` 覆盖 abuseipdb 三项 + 全局熔断）。
+
+| provider | per_minute | per_hour | per_day | 说明 |
+|---|---|---|---|---|
+| bgpview | 30 | 1000 | — | 无需 key |
+| ipinfo | 30 | 500 | — | 免费月额度大，按分/时护栏 |
+| ip2location | 30 | 500 | — | 同上 |
+| **abuseipdb** | **10** | **100** | **900** | 免费约 1000/天，**留 ~10% 余量** |
+| threatfox | 30 | 500 | — | abuse.ch Auth-Key |
+
+> 各 provider 额度**互相独立**：一个 provider 触顶不影响其他。
+
+### 429 连续熔断（circuit breaker）
+- `record_429(provider)` 累加 `consecutive_429`，并按 `cooldown_seconds`（或 `Retry-After`）设单次冷却。
+- 当 `consecutive_429 >= max_consecutive_429`（默认 `ONLINE_MAX_CONSECUTIVE_429=3`）→ 进入**熔断**：
+  - 熔断期 `circuit_breaker_seconds`（默认 `ONLINE_CIRCUIT_BREAKER_SECONDS=3600`）内 `can_call()` 恒为 `False`；
+  - `next_available_at()` 返回**所有当前约束中最晚的恢复时刻**（熔断 > 冷却时取熔断）；
+  - runner 在熔断期返回 `circuit_open=True` 的统一失败对象，**绝不调用** `provider.query()`。
+- `record_success(provider)` 把 `consecutive_429` **清零**（额度/冷却到期自然恢复）。
+- `record_failure(provider)` 仅记录一次普通失败（占额度），**不**像 429 那样累计熔断。
+- 单次 429 不熔断（`consecutive_429=1 < 阈值`），仅短冷却，避免偶发限流误伤。
+
+### 缓存命中为什么不消耗额度
+- runner 调用顺序为 **validate → 缓存 → 限速/熔断 → query**：缓存命中**先于**限速检查直接返回，
+  既不调用 `record_*`、也不被限速/熔断拦截 → **缓存命中零额度消耗**，且限速/熔断期间缓存仍可服务。
+- 只有真正**回源**（缓存未命中或 `force_refresh`）才检查 `can_call()` 并在成功/失败/429 后 `record_*`。
+
+### force_refresh 为什么仍受限速保护
+- `force_refresh=True` 只**跳过缓存读取**，不跳过限速 —— 它必然走到「回源」分支，因此仍经过
+  `can_call()` 与熔断检查；超额/熔断时同样返回 `rate_limited`/`circuit_open`，**不**强制打 API。
+- 这样既能手动强制刷新单个 IP，又不会绕开额度护栏耗尽免费额度。
 
 ---
 

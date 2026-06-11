@@ -26,7 +26,7 @@ ONLINE_PROVIDERS: dict[str, type] = {
 }
 
 # 当前已实现真实 query() 的在线 provider（其余为骨架）
-IMPLEMENTED = {"bgpview", "ipinfo", "ip2location"}
+IMPLEMENTED = {"bgpview", "ipinfo", "ip2location", "abuseipdb"}
 
 
 def get_online_providers() -> list:

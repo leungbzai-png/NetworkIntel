@@ -11,7 +11,7 @@
 | `bgpview` | ASN/BGP | 否 | ✅ 已实现 query() | — |
 | `ipinfo` | GeoIP/ASN | 是 | ✅ 已实现 query()（带 token） | `IPINFO_TOKEN` |
 | `ip2location` | GeoIP | 是 | ✅ 已实现 query()（带 key） | `IP2LOCATION_API_KEY` |
-| `abuseipdb` | 威胁情报 | 是 | 🧩 骨架 | `ABUSEIPDB_API_KEY` |
+| `abuseipdb` | 威胁情报 | 是 | ✅ 已实现 query()（带 key，旁路） | `ABUSEIPDB_API_KEY` |
 | `threatfox` | 威胁情报 | 是 | 🧩 骨架 | `THREATFOX_API_KEY` |
 
 > 缓存 / 限速 / 离线降级的设计与实现见 `docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`。
@@ -34,6 +34,26 @@
 - 手动测试：`python scripts/provider_smoke_test.py --provider ip2location --query 8.8.8.8`
   - 未配置 key 时**优雅提示缺 key**，不发请求、不打印 key、不崩溃。
 - 统一输出字段：`ip / country_code / country_name / region / city / latitude / longitude / isp / domain / usage_type / asn / asn_name / source / fetched_at / raw`。
+
+### abuseipdb 使用（威胁情报，旁路 Provider）
+- **配置**：在 `.env` 设 `ABUSEIPDB_API_KEY=...`（gitignored；key 经请求头 `Key: <api_key>` 发送，**不进** URL/日志/异常/缓存/返回对象）。
+- **手动测试**：`python scripts/provider_smoke_test.py --provider abuseipdb --query 8.8.8.8`
+  - 未配置 key 时**优雅提示缺 key**（`missing_api_key`），不发请求、不打印 key、不崩溃。
+  - 缺 key 校验发生在限速检查**之前**，因此即便处于熔断也仍是 `missing_api_key`。
+- **统一输出字段**：`ip / abuse_confidence_score / total_reports / num_distinct_users / is_public / is_whitelisted / is_tor / usage_type / isp / domain / country_code / severity / threats / source / fetched_at / raw`。
+- **severity 分级**（由 `abuse_confidence_score` 推导）：`0→clean`、`1-24→low`、`25-74→medium`、`75-100→high`。
+- **为什么仍是旁路**：威胁结果直接影响风险评级、且免费额度敏感；接入 `query_ip` 主路径会引入网络依赖与额度风险，违背离线定位。当前只能经 `online_runner` / smoke 脚本显式调用。
+
+#### 为什么 AbuseIPDB 默认 `per_day=900`（而非免费额度 1000）
+- AbuseIPDB 免费档约 **1000 次/天**。默认 per_day 设为 **900** 而非 1000，是**主动留出 ~10% 安全余量**：
+  - 避免与官方计数因时区/边界/并发产生偏差时**恰好触顶被封**；
+  - 给手动排查、smoke 测试、缓存未命中的突发查询留缓冲；
+  - 触达本地 900 上限即 `rate_limited`，由缓存兜底，**不会**继续打 API 直到官方 429。
+- 该值可经 `.env` 的 `ABUSEIPDB_RATE_PER_DAY` 覆盖（连同 `ABUSEIPDB_RATE_PER_MINUTE` / `_PER_HOUR`）。
+
+#### 威胁类 TTL 为什么较短
+- 威胁状态时效性强（IP 被举报/洗白随时变化），缓存过久会让风险判定滞后。
+- 因此 abuseipdb 缓存 TTL 默认 **6 小时**（`ABUSEIPDB_CACHE_TTL_HOURS`），远短于 GeoIP/ASN 的 14–30 天。
 
 ### ipinfo vs ip2location 字段差异
 | 维度 | ipinfo | ip2location |

@@ -1,20 +1,22 @@
 """
-在线 Provider 模板测试（ipinfo / ip2location / abuseipdb / threatfox）：
+在线 Provider 模板测试（骨架 provider）：
   - 正确标记 requires_api_key 与 config_keys / ENV_KEY。
   - validate_config 能判断缺 key / 已配置，且缺 key 不崩溃。
   - query 为骨架：返回 not_implemented，不联网、不崩溃。
   - normalize_result 能处理模拟数据。
+
+注：bgpview / ipinfo / ip2location / abuseipdb 已实现真实 query()，
+由各自专属测试覆盖；此处仅覆盖仍为骨架的 threatfox。
 """
 import os
 
 import _bootstrap  # noqa: F401
 
 from providers.online import ONLINE_PROVIDERS
-from providers.online.abuseipdb import AbuseIPDBProvider
 from providers.online.threatfox import ThreatFoxProvider
 
-# 仍为骨架的模板（ipinfo / ip2location 已实现，单独由各自测试覆盖）
-TEMPLATES = [AbuseIPDBProvider, ThreatFoxProvider]
+# 仍为骨架的模板
+TEMPLATES = [ThreatFoxProvider]
 
 
 def test_registry_contains_all_online():
@@ -68,8 +70,6 @@ def test_query_skeleton_not_implemented_no_network():
 def test_normalize_result_handles_mock():
     # 各模板的 normalize_result 用最简模拟数据，确保不崩溃
     samples = {
-        "ip2location": {"ip": "8.8.8.8", "country_code": "US", "asn": "15169"},
-        "abuseipdb":   {"data": {"ipAddress": "8.8.8.8", "abuseConfidenceScore": 0, "countryCode": "US"}},
         "threatfox":   {"data": [{"threat_type": "botnet_cc", "malware_printable": "X"}]},
     }
     for cls in TEMPLATES:

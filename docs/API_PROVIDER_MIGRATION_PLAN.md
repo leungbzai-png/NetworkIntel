@@ -54,8 +54,18 @@
 - `tests/test_ip2location_provider.py`：缺 key/占位符/已配置/normalize/query 成功/401/429/超时 + 经 runner 的缓存命中与 force_refresh（零网络，key 不泄露）。
 
 **缓存+限速基础设施已落地**（见 `ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`）。
-**下一步顺序**：`abuseipdb`（威胁类、额度敏感）→ `threatfox`。
-**为何暂不接 AbuseIPDB**：免费约 1000/天且威胁类 TTL 短，无缓存+限速时批量查询极易耗尽额度/触发封禁；必须先落地 `online_cache` + 令牌桶 + 429 熔断。
+
+**已完成：`abuseipdb`** ✅（威胁类、额度敏感 —— 在限速护栏 + 429 熔断落地后实现）
+- `python/providers/online/abuseipdb.py`：真实 `query()`（认证头 `Key: <api_key>`，key 不进 URL/日志/异常/缓存/返回对象）；401/403/429/5xx/超时统一失败对象；429 触发 runner/ratelimit 熔断。
+- 统一字段：`ip / abuse_confidence_score / total_reports / num_distinct_users / is_public / is_whitelisted / is_tor / usage_type / isp / domain / country_code / severity / threats / source / fetched_at / raw`；severity 分级 `0 clean / 1-24 low / 25-74 medium / 75-100 high`。
+- 限速护栏增强：`ratelimit.py` 支持 per_minute/hour/day + `max_consecutive_429` + `circuit_breaker_seconds`；`DEFAULT_PROVIDER_LIMITS` 中 abuseipdb 默认 `per_day=900`（留余量）；威胁类缓存 TTL 默认 6 小时（`ABUSEIPDB_CACHE_TTL_HOURS`）。
+- runner 顺序调整为 **validate→缓存→限速/熔断→query**：缓存命中零额度消耗；`force_refresh` 仍受限速；熔断期返回 `circuit_open` 且不调用 `query()`。abuseipdb 已加入默认允许列表（显式旁路；缺 key 优雅失败）。
+- `tests/test_abuseipdb_provider.py` + 扩充 `test_provider_ratelimit.py` / `test_online_runner.py` / `test_online_provider_templates.py`（默认零网络，key 不泄露）。
+- smoke：`--provider abuseipdb` / `--rate-limit-status` / `--simulate-429` / `--reset-rate-limit`（模拟只改本地状态，不联网）。
+
+**仍不接入 `query_ip`**：abuseipdb 仅旁路调用；接入主查询仍留待第 3 批评审。
+**下一步顺序**：`threatfox`（最后一个骨架）。
+**为何先落地缓存+限速再实现 AbuseIPDB**：免费约 1000/天且威胁类 TTL 短，无缓存+限速时批量查询极易耗尽额度/触发封禁；故顺序为先 `online_cache` + 限速 + 429 熔断，再实现真实 `query()`。
 
 ### 第 2 批（中期，中风险）— 下载源「双轨」纳管
 - 让 `LegacyDownloadAdapter` 在 `do_update.py` 中**可选**地枚举（feature flag），与旧 `PLUGIN_REGISTRY` 并存验证一致性。

@@ -29,14 +29,16 @@ D:\Python\python.exe tests/run_tests.py
 | `test_online_provider_templates.py` | `requires_api_key`/`config_keys`/`ENV_KEY`；缺 key 优雅校验；`query` 骨架不联网；`normalize_result` mock |
 | `test_ipinfo_provider.py` | ipinfo 缺 key/占位符/已配置；normalize；query 成功/401/429/超时（mock）；token 不泄露 |
 | `test_ip2location_provider.py` | ip2location 缺 key/占位符/已配置；normalize；query 成功/401/429/超时；经 runner 的缓存命中 + force_refresh；key 不泄露 |
+| `test_abuseipdb_provider.py` | abuseipdb 缺 key/占位符/dummy 已配置；severity 分级；normalize 完整字段集 + clean 无 threats；query 成功/401/403/429/5xx/超时；429→rate_limited；key 不泄露 |
 | `test_provider_cache.py` | online_cache set/get；过期不命中；purge_expired；stats；upsert（临时库+可控时钟） |
-| `test_provider_ratelimit.py` | 限额生效与窗口恢复；429 冷却；Retry-After；stats（临时 JSON+可控时钟） |
-| `test_online_runner.py` | 缓存命中不回源；force_refresh 绕过；use_cache=False；缺 key 优雅；不允许的 provider |
+| `test_provider_ratelimit.py` | 限额生效与窗口恢复；per_day 边界；provider 额度独立；429 冷却/Retry-After；**连续 429 熔断**；record_success 清零 consecutive_429；record_failure 不熔断；reset；`build_default_limiter` abuseipdb per_day=900（临时 JSON+可控时钟） |
+| `test_online_runner.py` | 缓存命中不回源/不消耗额度；force_refresh 绕过缓存但仍受限速；use_cache=False；缺 key 优雅；不允许的 provider；限速/熔断时不调用 query 并返回统一失败；abuseipdb 在默认允许列表 |
 
 ## 3. 网络策略
 
-- **自动测试默认零网络**：BGPView 的 `query()` 通过 monkeypatch `providers.http.http_get_json` 注入模拟响应；模板 `query()` 是骨架（直接返回 `not_implemented`）。
-- **真实网络查询**走手动脚本：`python scripts/provider_smoke_test.py`（仅 BGPView 无需 key）。
+- **自动测试默认零网络**：bgpview/ipinfo/ip2location/abuseipdb 的 `query()` 通过 monkeypatch `providers.http.http_get_json` 注入模拟响应；剩余模板 `query()` 是骨架（直接返回 `not_implemented`）。限速/熔断测试用临时 JSON + 可注入时钟，不触碰真实 `cache/online_ratelimit.json`。
+- **真实网络查询**走手动脚本：`python scripts/provider_smoke_test.py --provider <name> --query <ip>`（仅 BGPView 无需 key；需 key 者缺 key 时优雅提示）。
+- **限速维护/模拟均不联网**：`--rate-limit-status` / `--simulate-429 <provider>` / `--reset-rate-limit <provider>` 只读写本地限速 JSON。
 
 ## 4. 密钥安全
 
@@ -46,5 +48,5 @@ D:\Python\python.exe tests/run_tests.py
 ## 5. 当前结果
 
 ```
-53/53 passed, 0 failed
+76/76 passed, 0 failed
 ```
