@@ -1,6 +1,48 @@
 # NetworkIntel 本地离线IP情报平台
 
-> 离线查IP，全可视化TUI界面，Windows原生部署，无需Docker
+> 离线查IP，全可视化界面，Windows原生部署，无需Docker
+
+---
+
+## 项目定位
+
+**NetworkIntel 是一个 Windows 本地、离线优先的 IP / 网络情报平台。**
+
+- **离线优先原则**：核心查询 `query_ip` **只读本地 SQLite**（`live/intel.db`），不依赖任何外部网络。
+  断网、弱网环境下查询依旧可预测、稳定、即时。首次需联网下载数据，之后查询全程离线。
+- **本地数据库**：17 个公开数据源经下载型 Provider 批量落库到 `live/intel.db`（GeoIP / ASN / RPKI /
+  RIR / 云 IP 段 / Tor / VPN / 威胁情报 / WHOIS 等），统一只读查询并自动计算风险等级。
+- **在线 Provider 旁路能力（可选、默认关闭、不接入主查询）**：另有一层「在线查询 Provider」
+  作为**旁路增强**，受缓存 + 限速 + 429 熔断保护，**未接入** `query_ip` 主流程，不影响离线查询。
+  详见 [`docs/ONLINE_PROVIDERS.md`](docs/ONLINE_PROVIDERS.md)。
+
+### 已实现在线 Provider（旁路，显式调用）
+
+| Provider | 类别 | 需要 Key | env 变量 |
+|---|---|---|---|
+| BGPView | ASN/BGP | 否 | — |
+| ipinfo | GeoIP/ASN | 是 | `IPINFO_TOKEN` |
+| ip2location | GeoIP | 是 | `IP2LOCATION_API_KEY` |
+| AbuseIPDB | 威胁情报 | 是 | `ABUSEIPDB_API_KEY` |
+
+> 在线能力仅能通过 `providers.online_runner.run_provider()` 或 `scripts/provider_smoke_test.py`
+> **显式旁路调用**，绝不进入离线查询主流程。
+
+### 文档导航
+
+| 文档 | 内容 |
+|---|---|
+| [`DEVELOPMENT.md`](DEVELOPMENT.md) | 开发环境、目录结构、如何新增 Provider、如何提交代码 |
+| [`ROADMAP.md`](ROADMAP.md) | 版本规划（v0.1 → v1.0） |
+| [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 当前完成度、架构状态、风险、下一步 |
+| [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md) | 发布前检查清单 |
+| [`CLAUDE_HANDOFF.md`](CLAUDE_HANDOFF.md) | 给后续 AI/人接手的红线与交接说明 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 项目规范化变更记录 |
+| [`docs/ONLINE_PROVIDERS.md`](docs/ONLINE_PROVIDERS.md) | 在线 Provider 说明 |
+| [`docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md`](docs/ONLINE_PROVIDER_CACHE_AND_RATE_LIMIT.md) | 缓存 / 限速 / 熔断设计 |
+| [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md) | SQLite 并发写入审计 |
+| [`docs/TESTING.md`](docs/TESTING.md) | 测试体系 |
+| [`SECURITY.md`](SECURITY.md) | 密钥与安全规范 |
 
 ---
 
@@ -384,6 +426,77 @@ A: 编辑 `sources.yaml`，将 `peeringdb.enabled` 改为 `true`，然后触发�
 
 **Q: 如何查询多个IP但不生成报告**
 A: 在 F2 批量页查询后，关闭浏览器弹出的报告即可。报告文件保存在 `reports\`，可以删除。
+
+---
+
+## 启动方式
+
+| 入口 | 用途 |
+|---|---|
+| `start.bat` | 启动可视化界面（推荐，自动装依赖） |
+| `update.bat` | 手动全量更新数据（CLI，串行执行 `python/do_update.py`） |
+| `python python/main.py` | 直接运行主程序（TUI/CLI 入口） |
+| `python python/main_gui.py` | 直接运行 PySide6 图形界面 |
+
+> CLI 更新（`update.bat` → `do_update.py`）**串行**执行各数据源，单写者，安全。
+> GUI/调度器的「全部更新」为并发触发，写库并发性请参阅
+> [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)。
+
+---
+
+## 配置方式
+
+| 文件 | 作用 | 是否提交 git |
+|---|---|---|
+| `.env` | **真实密钥**（MaxMind / ipinfo / AbuseIPDB 等） | ❌ 已 gitignore，绝不提交 |
+| `.env.example` | 密钥模板（仅占位符） | ✅ 提交 |
+| `configs/sources.yaml` | **真实**数据源/调度配置（密钥写 `${VAR}` 引用 `.env`） | ❌ 已 gitignore |
+| `configs/sources.example.yaml` | 配置模板（仅 `${VAR}` 占位符） | ✅ 提交 |
+
+首次配置：
+```cmd
+copy .env.example .env
+copy configs\sources.example.yaml configs\sources.yaml
+```
+然后编辑 `.env` 填入真实 key。`sources.yaml` 里用 `${MAXMIND_LICENSE_KEY}` 等引用，
+由 `config_loader` 在加载时从 `.env` 解析（不把明文写进被 git 跟踪的文件）。
+
+### API key 配置说明
+
+仅**在线 Provider** 需要 key（离线查询不需要任何 key）。在 `.env` 设置：
+```
+MAXMIND_LICENSE_KEY=...          # 离线 GeoIP 下载需要
+IPINFO_TOKEN=...                 # 在线 ipinfo（旁路）
+IP2LOCATION_API_KEY=...          # 在线 ip2location（旁路）
+ABUSEIPDB_API_KEY=...            # 在线 AbuseIPDB（旁路，免费约 1000/天）
+```
+key 解析顺序：先查 `sources.yaml` 对应源的 `${VAR}`，回退环境变量。
+key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存 / 返回对象。
+未配置 key 时在线 Provider **优雅提示缺 key**，不发请求、不崩溃。
+
+---
+
+## 安全注意事项
+
+- **绝不提交**：`.env`、`configs/sources.yaml`、`cache/`、`logs/`、`reports/`、`snapshots/`、
+  `backups/`、`live/*.db`（均已在 `.gitignore`）。
+- 真实 key 只写 `.env`；模板文件（`*.example.*`）只放占位符。
+- 提交前用 `git status` / `git diff` 自检，确认无真实 key、无大数据库文件。
+- 详见 [`SECURITY.md`](SECURITY.md) 与 [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)。
+
+---
+
+## 测试方式
+
+```cmd
+python tests/run_tests.py            # 内置最小运行器（无需 pytest）
+python -m pytest                     # 若已安装 pytest
+python scripts/provider_smoke_test.py                 # Provider 自检（默认不联网）
+python scripts/provider_smoke_test.py --rate-limit-status
+```
+- 当前 **76 个测试，默认零网络**（HTTP 层用 monkeypatch 注入模拟响应）。
+- 测试只读 `*.example.*` 模板，断言无真实 key；不读真实 `.env`。
+- 详见 [`docs/TESTING.md`](docs/TESTING.md)。
 
 ---
 
