@@ -8,7 +8,7 @@
 ## 0. 红线（不能随便动）
 
 1. **不要把在线 API 接进 `query_ip` 主流程。** `query/engine.py::query_ip` 必须保持**纯离线、只读 SQLite**。
-   在线 Provider 永远是旁路增强；要接入只能走 v0.2.0 的独立 `enrich()`（可选、可关闭，不改 `query_ip` 内部）。
+   在线 Provider 永远是旁路增强；要接入只能走 v0.3.0 的独立 `enrich()`（可选、可关闭，不改 `query_ip` 内部）。
 2. **不要移动主数据库**，也不要移动 `cache/ logs/ reports/ snapshots/ backups/ live/`。路径写在配置与 `.gitignore` 里，移动会破坏备份/快照/同步链路。
 3. **不要修改 SQLite 表结构**（`utils/schema.py` 的表定义）。并发问题是访问模式问题，不是 schema 问题。
 4. **改 GUI 前先审计。** GUI 文件大、副作用多（`main_gui.py` / `gui_extensions.py` / `gui_map.py`），盲改易回归。
@@ -64,12 +64,17 @@ python -m pytest                     # 等价
 
 ---
 
-## 5. 当前推荐下一步
+## 5. 当前推荐下一步（路线优先级）
 
-1. **v0.3.0 SQLite 写入串行化**（审计已就绪，最高优先）：按 `docs/SQLITE_CONCURRENCY_TODO.md`
-   P0 `busy_timeout` → P1 写锁/writer 队列 → P2 事务原子化 → P3 错误分类 → P4 压测。
-2. **v0.2.0 可选 online enrichment**：独立 `enrich()` 模块，可关闭，不改 `query_ip`。
-3. 补 **ThreatFox** 真实实现（旁路，参考 abuseipdb）。
+1. **v0.2.0 SQLite 写入串行化**（审计已就绪，**最高优先**）：busy_timeout → 写锁或 writer queue →
+   事务原子化 → 错误分类 → 压测。按 `docs/SQLITE_CONCURRENCY_TODO.md` 分步、每步独立可回滚。
+2. **v0.3.0 可选 online enrichment**：独立 `enrich()` 模块，可关闭，不改 `query_ip`。
+3. **v0.4.0 GUI 状态页**：Provider 状态 / 缓存与限速状态展示（审计后再改 GUI）。
+4. **v0.5.0 发布包 / 数据分离**；**v1.0.0 稳定版**。
+5. 旁路补全：**ThreatFox** 真实实现（参考 abuseipdb）。
+
+> 路线与 `README.md` / `ROADMAP.md` / `PROJECT_STATUS.md` 保持一致：v0.2.0=SQLite 串行化，
+> v0.3.0=enrichment，v0.4.0=GUI 状态页，v0.5.0=发布包/数据分离，v1.0.0=稳定版。
 
 ---
 

@@ -79,6 +79,24 @@ key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存
 
 ---
 
+## Release 资产（Windows x64 测试包）
+
+本 Release 额外提供一个 **Windows x64 测试 zip**（`NetworkIntel-v0.1.0-windows-x64.zip`）：
+
+- 内含基于**当前最新源码重新打包**的 `NetworkIntel.exe`（PySide6 图形界面）。
+- zip **不包含** 数据库、API key、真实配置、缓存、日志、报告、快照、备份。
+- 随附 `README.md`、`RUNNING.txt`、`.env.example`、`configs/sources.example.yaml`、本 Release Notes（仅模板与说明）。
+- 首次运行仍需用户**自行配置** `.env` / `configs/sources.yaml` 并初始化数据（见 `RUNNING.txt` 与 `README.md`）。
+- **源码仓库仍不包含** exe / 数据库 / key；exe **仅作为 GitHub Release 附件**分发，不进入 Git 仓库。
+- zip 产物本地统一存放在 `E:\Backup\Releases\NetworkIntel\`（独立于源码仓库目录）。
+
+> ⚠ **路径相关提示**：v0.1.0 测试 exe 默认从硬编码路径 `E:\NetworkIntel\configs\sources.yaml`
+> 读取配置，相关数据/缓存路径也是绝对路径。**在 `E:\NetworkIntel` 之外运行**需设置环境变量
+> `NETWORKINTEL_CONFIG` 指向你的 `sources.yaml`，并相应修改其中的 `base_dir` / `db_path` 等绝对路径。
+> 「发布包 / 数据分离」（便携化）列入 v0.5.0。
+
+---
+
 ## 已知限制
 
 - **SQLite 并发写入风险已审计但 v0.1.0 未修复**：GUI/调度器「全部更新」并发写库可能偶发
