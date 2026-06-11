@@ -1674,6 +1674,8 @@ class SetupDownloadWorker(QThread):
 
     def run(self):
         try:
+            # 首次下载前确保库与表结构存在（空库直接 load 会 no such table）
+            setup_profiles.prepare_database()
             summary = setup_profiles.download_sources(
                 self._names,
                 on_progress=lambda ev: self.progress.emit(ev),

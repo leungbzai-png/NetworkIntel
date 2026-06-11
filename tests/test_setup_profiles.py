@@ -158,6 +158,30 @@ def _make_db(path: Path, *, with_table=True, ok_rows=0):
         conn.close()
 
 
+def test_prepare_database_creates_writable_schema():
+    """空库场景：prepare_database 必须建表，否则首次下载 load 会 no such table。"""
+    with temp_dir() as d:
+        p = d / "live" / "intel.db"
+        # 建表前：直连应没有 source_meta 表
+        sp.prepare_database(str(p))
+        assert p.exists()
+        conn = sqlite3.connect(str(p))
+        try:
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            assert "source_meta" in tables
+            assert "threat_intel" in tables and "geoip" in tables
+            # 真实写入（即此前会 no such table 的语句）现在应成功
+            conn.execute(
+                "INSERT OR REPLACE INTO threat_intel "
+                "(network, network_start_int, network_end_int, threat_type, "
+                " list_name, source, snapshot_date) VALUES (?,?,?,?,?,?,?)",
+                ("1.2.3.0/24", 1, 2, "tor", "x", "x", "2026-01-01"))
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def test_db_status_missing_file():
     with temp_dir() as d:
         st = sp.db_status(str(d / "nope.db"))

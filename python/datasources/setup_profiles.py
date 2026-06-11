@@ -145,6 +145,26 @@ def resolve_selection(
     return {"selected": selected, "skipped": skipped}
 
 
+# ── 数据库准备（首次下载前必须建表）────────────────────────────
+
+def prepare_database(db_path: Optional[str] = None) -> str:
+    """
+    确保数据库文件与**表结构**存在，供首次下载落库前调用。
+    与 do_update.py 一致：get_connection 只建空文件、不建表，因此空库直接下载会
+    触发 `no such table`；此处先 init_db 创建全部表/索引。
+
+    db_path 为空时经 Config 解析（portable 路径）。返回最终 db_path。
+    """
+    from utils.schema import init_db
+    if db_path is None:
+        db_path = get_config().db_path
+    parent = os.path.dirname(db_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    init_db(db_path)
+    return db_path
+
+
 # ── 串行下载执行器（可注入，便于零网络测试）────────────────────
 
 def _default_updater(name: str, progress_cb: Callable) -> dict:
