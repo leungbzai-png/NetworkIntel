@@ -1,0 +1,2 @@
+# 在原有 requirements.txt 之上追加：
+PySide6>=6.6.0
