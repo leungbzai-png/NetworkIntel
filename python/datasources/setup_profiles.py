@@ -165,6 +165,30 @@ def prepare_database(db_path: Optional[str] = None) -> str:
     return db_path
 
 
+def ensure_runtime_database(db_path: Optional[str] = None) -> str:
+    """
+    启动期幂等建库：保证 GUI 在全新 / 空 portable 目录首次运行时，任何只读
+    查询/统计路径都不会因缺表而 `no such table` 崩溃。
+
+    与 prepare_database() 的区别：本函数额外尝试建立 IPv6 扩展表（geoip_v6 等），
+    使 v6 查询同样安全。**只建表、不下载数据、不改变 needs_setup 判断**
+    （init_db 建出的 source_meta 为空，needs_setup 仍为 True）。
+
+    设计要点：
+      * v4 建表（prepare_database）是 1.1.1.1 等核心查询的硬依赖，先执行；
+      * v6 建表放在独立 try/except，任何 v6 失败都不得回滚/影响已建好的 v4 表。
+    返回最终 db_path。
+    """
+    db_path = prepare_database(db_path)
+    try:
+        from utils.schema_v6 import init_v6_tables
+        init_v6_tables(db_path)
+    except Exception:
+        # v6 不在首次冒烟路径上：建表失败仅记为降级，绝不阻断启动。
+        pass
+    return db_path
+
+
 # ── 串行下载执行器（可注入，便于零网络测试）────────────────────
 
 def _default_updater(name: str, progress_cb: Callable) -> dict:

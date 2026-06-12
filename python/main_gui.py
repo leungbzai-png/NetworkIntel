@@ -1407,7 +1407,19 @@ class SettingsPage(QWidget):
         self._load()
 
     def _build(self):
-        root = QVBoxLayout(self)
+        # 整页可滚动：低分辨率 / 小窗口下，多张卡片不会被纵向挤压（输入框压成一条线）。
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+        root = QVBoxLayout(content)
         root.setContentsMargins(32, 28, 32, 24)
         root.setSpacing(18)
 
@@ -1450,9 +1462,12 @@ class SettingsPage(QWidget):
             row = QHBoxLayout()
             inp = QLineEdit()
             inp.setEchoMode(QLineEdit.Password)
+            inp.setMinimumHeight(30)
+            inp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             inp.setPlaceholderText("输入新 Key 以更新（留空保持不变）")
             toggle = QToolButton()
             toggle.setCheckable(True)
+            toggle.setMinimumHeight(30)
             toggle.setText("显示")
             toggle.toggled.connect(
                 lambda checked, e=env_var, b=None: self._toggle_key_echo(e, checked))
@@ -1487,10 +1502,12 @@ class SettingsPage(QWidget):
         # 数据目录模式（Portable / Custom）
         c, l = make_card("数据目录模式", self)
         self.home_input = QLineEdit(); self.home_input.setReadOnly(True)
+        self.home_input.setMinimumHeight(30)
         l.addWidget(QLabel("程序根目录 (home)")); l.addWidget(self.home_input)
 
         l.addWidget(QLabel("模式"))
         self.mode_combo = QComboBox()
+        self.mode_combo.setMinimumHeight(30)
         self.mode_combo.addItems(["Portable（数据跟随程序目录）", "Custom（自定义数据目录）"])
         self.mode_combo.currentIndexChanged.connect(self._on_mode_change)
         l.addWidget(self.mode_combo)
@@ -1498,6 +1515,7 @@ class SettingsPage(QWidget):
         l.addWidget(QLabel("数据目录 (data_dir)"))
         drow = QHBoxLayout()
         self.data_dir_input = QLineEdit(); self.data_dir_input.setReadOnly(True)
+        self.data_dir_input.setMinimumHeight(30)
         self.btn_pick_data = QPushButton("选择目录…")
         self.btn_pick_data.clicked.connect(self._pick_data_dir)
         drow.addWidget(self.data_dir_input, 1)
@@ -1963,6 +1981,10 @@ class MainWindow(QMainWindow):
         self._theme_mode = "system"  # system / light / dark
         self._needs_setup = False
         self._setup_prompted = False
+        # 路径初始化完成后、构建任何读库页面之前，先确保数据库与全部基础表存在。
+        # 否则全新 / 空 portable 目录下，统计条 / 威胁库 / 查询页在构造时直接读表，
+        # 会触发 sqlite3.OperationalError: no such table（只建表、不下载、不改 needs_setup）。
+        self._ensure_database_ready()
         self._build_ui()
         self._apply_theme()
 
@@ -1977,6 +1999,18 @@ class MainWindow(QMainWindow):
         # 首次运行：缺库/空库时主动弹出数据初始化向导（可关闭，不强制）
         if BACKEND_OK and getattr(self, "_needs_setup", False):
             QTimer.singleShot(700, self._maybe_prompt_setup)
+
+    def _ensure_database_ready(self):
+        """
+        启动期幂等建库：保证空库首次运行时任何读表路径都不崩溃。
+        只建表、不下载数据、不改变 needs_setup 判断；任何失败都降级，绝不阻断启动。
+        """
+        if not BACKEND_OK:
+            return
+        try:
+            setup_profiles.ensure_runtime_database(get_config().db_path)
+        except Exception as e:
+            print("[ensure_database_ready]", e)
 
     # ────── UI ──────
     def _build_ui(self):

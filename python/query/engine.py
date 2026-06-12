@@ -110,7 +110,7 @@ def query_ip(ip_str: str, db_path: str = None) -> dict:
             ip_int = ip_to_int(normalized)
             result["geoip"] = _query_geoip(conn, ip_int)
             result["asn"] = _query_asn(conn, ip_int)
-            result["rpki"] = _query_rpki(conn, ip_int, result.get("asn", {}).get("asn"))
+            result["rpki"] = _query_rpki(conn, ip_int, (result.get("asn") or {}).get("asn"))
             result["rir"] = _query_rir(conn, ip_int)
             result["cloud"] = _query_cloud(conn, ip_int)
             result["cloud_provider"] = result["cloud"]["provider"] if result["cloud"] else None
@@ -120,7 +120,7 @@ def query_ip(ip_str: str, db_path: str = None) -> dict:
             result["threats"] = _query_threats(conn, ip_int)
 
         # 10. PeeringDB（如果有ASN）
-        asn_num = result.get("asn", {}).get("asn")
+        asn_num = (result.get("asn") or {}).get("asn")
         if asn_num:
             result["peeringdb"] = _query_peeringdb(conn, asn_num)
 
