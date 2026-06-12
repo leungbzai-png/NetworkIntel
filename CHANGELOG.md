@@ -5,6 +5,32 @@
 
 ---
 
+## [0.2.1] - 2026-06-12 — Hotfix：数据源页面列表空白
+
+仅修复 portable 版「数据源」页面在初始化完成后列表可能整页空白的显示 bug。
+**不改数据库格式、不改 key 配置方式、不改 v0.2.0 的 portable 使用方式**，不新增功能。
+
+### 修复
+- **数据源页面列表空白（阻断级显示 bug）**：`SourcesPage` 的表格创建段历史上被误置于
+  `_open_setup()` 作用域内，导致 `self.table` 从未在 `_build()` 中创建；`refresh()` 访问
+  `self.table` 即抛 `AttributeError` 并被宽泛 `except` 静默吞掉，页面框架照常但中间列表永远空白。
+  将表格创建段移回 `_build()`，确保构造时即创建并加入布局。该缺陷自 v0.2.0 数据源向导引入起即存在。
+- **状态合并抽为纯函数 + 容错强化**：新增 `compute_source_status_rows()`（纯函数，可无 GUI 测试）。
+  空库 / 无 `source_meta` 表 / schema 不匹配时照常列出全部配置源（记录数 0、状态 never）；
+  单个数据源状态读取失败只把该行降级为 `error`，绝不因单源失败丢行或清空整页；异常记入日志而非静默吞掉。
+- 「刷新」「数据初始化…」「全部更新」后页面均会重新加载并刷新状态。
+
+### 测试
+- 新增 `tests/test_sources_page.py`：纯函数空库/含数据/实时覆盖/单源隔离用例，
+  以及 headless（offscreen Qt）构造 `SourcesPage` 断言 `table` 已创建且行数 == 配置源数量。
+- 全量 **133 / 133 passed**，零网络、零真实 key 输出。
+
+### 版本
+- 项目发布版本 `0.2.1`（`VERSION` 与 `python/__init__.py` `__version__`）；GUI `APP_VERSION` 保持独立（1.2.0）。
+- 不重写 / 不删除 v0.2.0 的 tag、Release 或 asset；v0.2.1 作为 Latest 发布。
+
+---
+
 ## [0.2.0] - 2026-06-11 — Portable Runtime + 首次初始化向导
 
 v0.2.0 正式版：在 Phase 1（Portable Runtime）基础上完成 Phase 2（首次初始化 / 数据源选择下载 / 打包发布）。

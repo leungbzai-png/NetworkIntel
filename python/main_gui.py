@@ -1074,6 +1074,71 @@ class BatchPage(QWidget):
 # ║                     页面：数据源                           ║
 # ╚════════════════════════════════════════════════════════════╝
 
+# 状态列默认颜色（按 status 取色，未知状态回退灰色）
+SOURCE_STATUS_COLORS = {
+    "ok": "#16A34A", "running": "#2563EB", "error": "#DC2626",
+    "stale": "#D97706", "never": "#9CA3AF", "idle": "#9CA3AF",
+}
+
+
+def compute_source_status_rows(sources, meta=None, live=None):
+    """纯函数：合并「配置源 + DB 元数据 + 调度器实时状态」为可渲染的行列表。
+
+    参数
+      sources: dict[name -> 源配置 dict]（来自 Config.get_all_sources()）
+      meta:    dict[name -> source_meta 行 dict]（DB 读不到时传 None/{}）
+      live:    dict[name -> 调度器实时状态 dict]（不可用时传 None/{}）
+
+    返回 list[dict]：每个已配置数据源 **恒返回一行**，字段包含
+      name / description / enabled / last_updated / record_count / status / message。
+
+    容错保证：
+      * 空库（meta 为空）仍返回全部配置源，status='never'、record_count=0。
+      * 单个数据源合并出错只把该行降级为 status='error'，绝不丢行 / 不抛出，
+        从而单源失败不会导致整页空白。
+    """
+    rows = []
+    meta = meta or {}
+    live = live or {}
+    for name, scfg in (sources or {}).items():
+        try:
+            scfg = scfg or {}
+            m = meta.get(name, {}) or {}
+            ls = live.get(name, {}) or {}
+
+            last = m.get("last_updated") or ""
+            if last:
+                last = str(last).replace("T", " ").split(".")[0]
+            try:
+                rec_count = int(m.get("record_count") or ls.get("record_count") or 0)
+            except (TypeError, ValueError):
+                rec_count = 0
+            status = ls.get("status") or m.get("status") or "never"
+            msg = ls.get("message") or m.get("error_message") or ""
+
+            rows.append({
+                "name": name,
+                "description": scfg.get("description", "") or "",
+                "enabled": bool(scfg.get("enabled", True)),
+                "last_updated": last,
+                "record_count": rec_count,
+                "status": status,
+                "message": msg,
+            })
+        except Exception as e:
+            # 单源降级为 error 行，保证列表完整、UI 不空白
+            rows.append({
+                "name": name,
+                "description": "",
+                "enabled": True,
+                "last_updated": "",
+                "record_count": 0,
+                "status": "error",
+                "message": f"状态读取失败: {e}",
+            })
+    return rows
+
+
 class SourcesPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1117,15 +1182,9 @@ class SourcesPage(QWidget):
         bar.addWidget(self.btn_update_all)
         root.addLayout(bar)
 
-    def _open_setup(self):
-        try:
-            dlg = FirstRunSetupDialog(self.window())
-            dlg.exec()
-            self.refresh()
-        except Exception as e:
-            QMessageBox.critical(self, "无法打开数据初始化", str(e))
-
-        # 表
+        # 表（必须在 _build 内创建并 add 到 layout；
+        # 历史回归曾把本段误置于 _open_setup，导致 self.table 从未创建、
+        # refresh() 抛 AttributeError 被吞掉、数据源列表整页空白。）
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             ["数据源", "说明", "启用", "最后更新", "记录数", "状态", "消息"]
@@ -1142,63 +1201,72 @@ class SourcesPage(QWidget):
         self.table.doubleClicked.connect(self._on_double_click)
         root.addWidget(self.table, 1)
 
+    def _open_setup(self):
+        try:
+            dlg = FirstRunSetupDialog(self.window())
+            dlg.exec()
+            self.refresh()
+        except Exception as e:
+            QMessageBox.critical(self, "无法打开数据初始化", str(e))
+
     def _on_sched_event(self, *args, **kwargs):
         # 跨线程：仅触发 UI 端轮询变更（通过 QTimer 已经轮询，故无操作）
         pass
 
     def refresh(self):
+        # 配置源是「列表能否非空」的根本来源；读不到才真正无法渲染。
         try:
             cfg = get_config()
-            sources = cfg.get_all_sources()
-            # 从 source_meta 拉最新状态
-            meta = {}
+            sources = cfg.get_all_sources() or {}
+        except Exception as e:
+            print("[SourcesPage.refresh] 配置加载失败:", e)
+            return
+
+        # 从 source_meta 拉最新状态：空库 / 无表 / schema 不匹配都降级为无元数据，
+        # 仍照常显示全部配置源（status=never），而不是整页空白。
+        meta = {}
+        try:
+            conn = get_connection(cfg.db_path)
             try:
-                conn = get_connection(cfg.db_path)
-                try:
-                    rows = conn.execute(
-                        "SELECT source, last_updated, record_count, status, error_message "
-                        "FROM source_meta"
-                    ).fetchall()
-                    for row in rows:
-                        meta[row["source"]] = dict(row)
-                finally:
-                    conn.close()
-            except Exception:
-                pass
+                rows = conn.execute(
+                    "SELECT source, last_updated, record_count, status, error_message "
+                    "FROM source_meta"
+                ).fetchall()
+                for row in rows:
+                    meta[row["source"]] = dict(row)
+            finally:
+                conn.close()
+        except Exception as e:
+            print("[SourcesPage.refresh] source_meta 不可用，按未下载显示:", e)
 
-            # 调度器实时状态
+        # 调度器实时状态（不可用不致命）
+        try:
+            live = get_scheduler().get_job_status()
+        except Exception:
+            live = {}
+
+        data = compute_source_status_rows(sources, meta, live)
+        self.table.setRowCount(len(data))
+        for i, r in enumerate(data):
             try:
-                live = get_scheduler().get_job_status()
-            except Exception:
-                live = {}
-
-            self.table.setRowCount(len(sources))
-            for i, (name, scfg) in enumerate(sources.items()):
-                m = meta.get(name, {})
-                ls = live.get(name, {})
-
-                last = m.get("last_updated") or ""
-                if last:
-                    last = last.replace("T", " ").split(".")[0]
-                rec_count = m.get("record_count") or ls.get("record_count") or 0
-                status = ls.get("status") or m.get("status") or "never"
-                msg = ls.get("message") or m.get("error_message") or ""
+                name = r["name"]
+                status = r["status"]
+                rec_count = r["record_count"]
 
                 self.table.setItem(i, 0, QTableWidgetItem(name))
-                self.table.setItem(i, 1, QTableWidgetItem(scfg.get("description", "")))
-                self.table.setItem(i, 2, QTableWidgetItem("✓" if scfg.get("enabled", True) else "—"))
-                self.table.setItem(i, 3, QTableWidgetItem(last or "—"))
-                self.table.setItem(i, 4, QTableWidgetItem(f"{rec_count:,}" if rec_count else "—"))
+                self.table.setItem(i, 1, QTableWidgetItem(r["description"]))
+                self.table.setItem(i, 2, QTableWidgetItem("✓" if r["enabled"] else "—"))
+                self.table.setItem(i, 3, QTableWidgetItem(r["last_updated"] or "—"))
+                rc_text = f"{rec_count:,}" if isinstance(rec_count, int) else str(rec_count)
+                self.table.setItem(i, 4, QTableWidgetItem(rc_text))
 
                 st_item = QTableWidgetItem(status)
-                color = {"ok": "#16A34A", "running": "#2563EB", "error": "#DC2626",
-                         "stale": "#D97706", "never": "#9CA3AF", "idle": "#9CA3AF"}.get(status, "#6B7280")
-                st_item.setForeground(QColor(color))
+                st_item.setForeground(QColor(SOURCE_STATUS_COLORS.get(status, "#6B7280")))
                 self.table.setItem(i, 5, st_item)
-                self.table.setItem(i, 6, QTableWidgetItem(msg))
+                self.table.setItem(i, 6, QTableWidgetItem(r["message"]))
                 self.table.item(i, 0).setData(Qt.UserRole, name)
-        except Exception as e:
-            print("[SourcesPage.refresh]", e)
+            except Exception as e:
+                print("[SourcesPage.refresh] 行渲染失败:", r.get("name"), e)
 
     def _on_double_click(self, idx):
         row = idx.row()
