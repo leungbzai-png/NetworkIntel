@@ -17,7 +17,7 @@
 - [ ] 仓库体积合理（无意外的二进制/数据大文件混入）。
 
 ## C. 测试
-- [ ] `python tests/run_tests.py` → **110/110 passed, 0 failed**（或随版本递增后的全绿）。
+- [ ] `python tests/run_tests.py` → **116/116 passed, 0 failed**（或随版本递增后的全绿）。
 - [ ] 测试默认**零网络**、输出**无真实 key**。
 
 ## D. 入口可运行
@@ -29,6 +29,7 @@
 - [ ] `README.md` / `DEVELOPMENT.md` / `ROADMAP.md` / `PROJECT_STATUS.md` 与本次变更一致。
 - [ ] `CHANGELOG.md` 记录了本次发布内容。
 - [ ] `docs/*` 中受影响的文档（在线 Provider / 缓存限速 / SQLite 审计 / 测试）已更新。
+- [ ] `docs/RELEASE_NOTES_v0.2.0.md` 存在且与本次发布内容一致（独立于 CHANGELOG 段落）。
 
 ## F. Git 卫生
 - [ ] `git status` **干净**（无未跟踪的敏感文件、无遗留改动）。

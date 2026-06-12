@@ -6,9 +6,13 @@ cd /d "%~dp0"
 
 rem ============================================================
 rem  NetworkIntel - 打包 Portable 发布 zip（v0.2.0+）
-rem  产物：dist\NetworkIntel-v<VERSION>-portable-win64\ 与同名 .zip
-rem  内容：GUI exe + 配置模板(.example) + .env.example + 关键文档
+rem  顶层目录： NetworkIntel-v<VERSION>-windows-x64-portable\
+rem  产物：
+rem    dist\NetworkIntel-v<VERSION>-windows-x64-portable.zip
+rem    E:\Backup\Releases\NetworkIntel\NetworkIntel-v<VERSION>-windows-x64-portable.zip
+rem  内容：GUI exe + 配置模板(.example) + .env.example + RUNNING.txt + 关键文档
 rem  注意：exe / dist / zip 已被 .gitignore 忽略，不会进版本库。
+rem        zip 不含 .env / configs\sources.yaml / 数据库 / cache / logs / reports / snapshots / backups。
 rem ============================================================
 
 set "VER="
@@ -16,16 +20,21 @@ for /f "usebackq tokens=* delims= " %%v in ("VERSION") do if not defined VER set
 if not defined VER (
     echo FAILED: cannot read VERSION file & pause & exit /b 1
 )
+
+set "NAME=NetworkIntel-v%VER%-windows-x64-portable"
+set "STAGE=dist\%NAME%"
+set "ZIP=dist\%NAME%.zip"
+set "RELEASE_DIR=E:\Backup\Releases\NetworkIntel"
+set "RELEASE_ZIP=%RELEASE_DIR%\%NAME%.zip"
+
 echo ================================================
 echo  NetworkIntel - Package Portable
 echo  Version: %VER%
+echo  Output : %RELEASE_ZIP%
 echo ================================================
 echo.
 
-set "STAGE=dist\NetworkIntel-v%VER%-portable-win64"
-set "ZIP=dist\NetworkIntel-v%VER%-portable-win64.zip"
-
-echo [1/4] Building GUI exe (PyInstaller, 3-8 min first run) ...
+echo [1/5] Building GUI exe (PyInstaller, 3-8 min first run) ...
 cd python
 python -m pip install --upgrade --quiet pyinstaller PySide6 || (
     echo FAILED to install build deps & cd .. & pause & exit /b 1
@@ -64,38 +73,39 @@ if not exist "python\dist\NetworkIntel.exe" (
     pause & exit /b 1
 )
 
-echo [2/4] Staging portable layout ...
+echo [2/5] Staging portable layout ...
 if exist "%STAGE%" rmdir /S /Q "%STAGE%"
 mkdir "%STAGE%"
 mkdir "%STAGE%\configs"
+mkdir "%STAGE%\docs"
 copy /Y "python\dist\NetworkIntel.exe" "%STAGE%\NetworkIntel.exe" >nul
 copy /Y "configs\sources.example.yaml" "%STAGE%\configs\sources.example.yaml" >nul
 copy /Y ".env.example" "%STAGE%\.env.example" >nul
 copy /Y "README.md" "%STAGE%\README.md" >nul
-if exist "docs\FIRST_RUN_SETUP.md" copy /Y "docs\FIRST_RUN_SETUP.md" "%STAGE%\FIRST_RUN_SETUP.md" >nul
-if exist "docs\PORTABLE_MODE.md" copy /Y "docs\PORTABLE_MODE.md" "%STAGE%\PORTABLE_MODE.md" >nul
+copy /Y "docs\RUNNING.txt" "%STAGE%\RUNNING.txt" >nul
+copy /Y "docs\RELEASE_NOTES_v%VER%.md" "%STAGE%\docs\RELEASE_NOTES_v%VER%.md" >nul
+copy /Y "docs\PORTABLE_MODE.md" "%STAGE%\docs\PORTABLE_MODE.md" >nul
+copy /Y "docs\FIRST_RUN_SETUP.md" "%STAGE%\docs\FIRST_RUN_SETUP.md" >nul
 
-echo [3/4] Writing quick-start note ...
-set "NOTE=%STAGE%\READ_ME_FIRST.txt"
-echo NetworkIntel v%VER% - Portable> "%NOTE%"
-echo ============================================================>> "%NOTE%"
-echo 1. 双击 NetworkIntel.exe 启动。首次运行会在本目录自动创建>> "%NOTE%"
-echo    configs/ live/ cache/ logs/ reports/ snapshots/ backups/。>> "%NOTE%"
-echo 2. 首次缺少数据库时会弹出「数据初始化」向导：选择>> "%NOTE%"
-echo    最小/推荐/完整/自定义，串行下载数据源。>> "%NOTE%"
-echo 3. geoip 需 MaxMind Key：设置页填写后再下载（仅写入 .env）。>> "%NOTE%"
-echo 4. 详见 FIRST_RUN_SETUP.md 与 PORTABLE_MODE.md。>> "%NOTE%"
-
-echo [4/4] Zipping ...
+echo [3/5] Zipping (top-level folder preserved) ...
 if exist "%ZIP%" del /Q "%ZIP%"
-powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%\*' -DestinationPath '%ZIP%' -Force"
-
-echo.
-if exist "%ZIP%" (
-    echo DONE: %ZIP%
-    for %%I in ("%ZIP%") do echo  Size: %%~zI bytes
-) else (
+powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%' -DestinationPath '%ZIP%' -Force"
+if not exist "%ZIP%" (
     echo ZIP FAILED.
+    pause & exit /b 1
+)
+
+echo [4/5] Copying to release dir ...
+if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%"
+copy /Y "%ZIP%" "%RELEASE_ZIP%" >nul
+
+echo [5/5] Done.
+echo.
+if exist "%RELEASE_ZIP%" (
+    echo DONE: %RELEASE_ZIP%
+    for %%I in ("%RELEASE_ZIP%") do echo  Size: %%~zI bytes
+) else (
+    echo RELEASE COPY FAILED.
 )
 echo.
 pause

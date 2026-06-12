@@ -38,6 +38,10 @@
 
 向导通过 `setup_profiles.download_sources()` **逐个**执行 `plugin.update()`（download→parse→load→snapshot）：
 
+- **下载前先建表**。空库直接 `load()` 会 `no such table`，因此下载入口
+  （`SetupDownloadWorker.run()`）在任何 `plugin.update()` 之前先调用
+  `setup_profiles.prepare_database()` → `utils.schema.init_db()`，一次性创建全部表/索引
+  （portable 解析到 `home/live/intel.db`，custom 解析到 `<data_dir>/live/intel.db`）。
 - **绝不并发**。首次初始化面对的是空库，多源并发写 `intel.db` 会触发已审计的
   `database is locked`（见 [`SQLITE_CONCURRENCY_AUDIT.md`](SQLITE_CONCURRENCY_AUDIT.md)）。
   串行路径与命令行 `update.bat` / `do_update.py` 的安全模型一致。

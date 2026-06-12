@@ -21,11 +21,18 @@ v0.2.0 正式版：在 Phase 1（Portable Runtime）基础上完成 Phase 2（�
   成功失败汇总 / 缺 Key 跳过提示。首次运行（缺库/空库）自动弹出（可关闭、不强制、不阻断启动）；
   「数据源」页新增「数据初始化…」按钮随时可再次打开；状态栏横幅指引入口。
 
+### 发布前收口（阻断级修复）
+- **修复空库首次初始化 `no such table`**：首次下载入口在 `download_sources()` 前统一调用
+  `setup_profiles.prepare_database()` → `utils.schema.init_db()`，一次性建好全部表/索引；
+  修复集中、低侵入，未改 `query_ip` / updater / provider / 主库表结构。
+- 新增端到端测试：portable / custom 数据目录下，空库 → 建表 → 串行写库均无 `no such table`。
+
 ### 版本 / 测试 / 文档
-- 正式版本号 `0.2.0`（`VERSION` 与 `python/__init__.py` `__version__`）；GUI `APP_VERSION` 保持独立。
-- 测试增至 **110**（新增 `test_setup_profiles`：预设关系 / key 门控 / 选择顺序 / 串行编排 / 失败汇总 / 取消 / 库状态检测，零网络）。
-- 新增 `docs/FIRST_RUN_SETUP.md`；更新 README / ROADMAP / PROJECT_STATUS。
-- 打包 portable zip 并发布 v0.2.0 Release（不覆盖 v0.1.0；不改仓库可见性）。
+- 正式版本号 `0.2.0`（`VERSION` 与 `python/__init__.py` `__version__`）；GUI `APP_VERSION` 保持独立（1.2.0）。
+- 测试增至 **116**（`test_setup_profiles`：预设关系 / key 门控 / 选择顺序 / 串行编排 / 失败汇总 / 取消 / 库状态检测；
+  `test_first_run_db_init`：空库建表 / portable·custom 路径解析 / 空库串行下载不再 `no such table` / 最小模式串行；零网络、零真实 key）。
+- 新增 `docs/FIRST_RUN_SETUP.md`、`docs/RELEASE_NOTES_v0.2.0.md`；更新 README / ROADMAP / PROJECT_STATUS。
+- 仅发布 portable zip（不发布裸 exe）；不覆盖 v0.1.0；不改仓库可见性。
 
 > 以下 Phase 1 内容已并入 v0.2.0：
 

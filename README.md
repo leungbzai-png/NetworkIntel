@@ -361,6 +361,16 @@ E:\NetworkIntel\python\dist\NetworkIntel.exe
 **注意**：PyInstaller 打包的 exe 可能被杀毒软件（360、火绒等）误报。
 解决方法：将 `dist\` 目录加入杀毒软件白名单/信任区。
 
+### Portable 发布包（v0.2.0）
+
+v0.2.0 **只发布 portable zip，不发布裸 exe**：`package_portable.bat` 构建 GUI exe 并打包成
+`NetworkIntel-v0.2.0-windows-x64-portable.zip`（顶层目录 `NetworkIntel-v0.2.0-windows-x64-portable\`）。
+
+- zip **不内置数据库与 key**，也不含 `.env` / `configs/sources.yaml`；只随包 `*.example.*` 模板
+  与 `README.md` / `RUNNING.txt` / 关键文档。首次运行需用户**自行选择数据源**初始化（见 `RUNNING.txt`）。
+- **包体积约 220MB**：由 PySide6 + QtWebEngine 的 PyInstaller onefile 打包导致（内嵌 Chromium），本阶段暂不瘦身。
+- 详见 [`docs/RELEASE_NOTES_v0.2.0.md`](docs/RELEASE_NOTES_v0.2.0.md)。
+
 ---
 
 ## 新增数据源插件
