@@ -88,7 +88,7 @@ key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存
 - 随附 `README.md`、`RUNNING.txt`、`.env.example`、`configs/sources.example.yaml`、本 Release Notes（仅模板与说明）。
 - 首次运行仍需用户**自行配置** `.env` / `configs/sources.yaml` 并初始化数据（见 `RUNNING.txt` 与 `README.md`）。
 - **源码仓库仍不包含** exe / 数据库 / key；exe **仅作为 GitHub Release 附件**分发，不进入 Git 仓库。
-- zip 产物本地统一存放在 `E:\Backup\Releases\NetworkIntel\`（独立于源码仓库目录）。
+- zip 产物本地统一存放在独立于源码仓库的本地发布目录（不进入 Git 仓库）。
 
 > ⚠ **路径相关提示**：v0.1.0 测试 exe 默认从硬编码路径 `E:\NetworkIntel\configs\sources.yaml`
 > 读取配置，相关数据/缓存路径也是绝对路径。**在 `E:\NetworkIntel` 之外运行**需设置环境变量

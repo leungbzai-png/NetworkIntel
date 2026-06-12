@@ -9,7 +9,8 @@ rem  NetworkIntel - 打包 Portable 发布 zip（v0.2.0+）
 rem  顶层目录： NetworkIntel-v<VERSION>-windows-x64-portable\
 rem  产物：
 rem    dist\NetworkIntel-v<VERSION>-windows-x64-portable.zip
-rem    E:\Backup\Releases\NetworkIntel\NetworkIntel-v<VERSION>-windows-x64-portable.zip
+rem    %RELEASE_DIR%\NetworkIntel-v<VERSION>-windows-x64-portable.zip
+rem    （RELEASE_DIR 默认 release\，可用环境变量覆盖到任意本地发布/备份目录）
 rem  内容：GUI exe + 配置模板(.example) + .env.example + RUNNING.txt + 关键文档
 rem  注意：exe / dist / zip 已被 .gitignore 忽略，不会进版本库。
 rem        zip 不含 .env / configs\sources.yaml / 数据库 / cache / logs / reports / snapshots / backups。
@@ -24,7 +25,7 @@ if not defined VER (
 set "NAME=NetworkIntel-v%VER%-windows-x64-portable"
 set "STAGE=dist\%NAME%"
 set "ZIP=dist\%NAME%.zip"
-set "RELEASE_DIR=E:\Backup\Releases\NetworkIntel"
+if not defined RELEASE_DIR set "RELEASE_DIR=release"
 set "RELEASE_ZIP=%RELEASE_DIR%\%NAME%.zip"
 
 echo ================================================

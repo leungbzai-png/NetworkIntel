@@ -45,6 +45,7 @@ __pycache__/
 dist/
 dist_backup*/
 build/
+release/
 *.spec
 *.exe
 *.zip
