@@ -27,10 +27,20 @@ v0.2.0 正式版：在 Phase 1（Portable Runtime）基础上完成 Phase 2（�
   修复集中、低侵入，未改 `query_ip` / updater / provider / 主库表结构。
 - 新增端到端测试：portable / custom 数据目录下，空库 → 建表 → 串行写库均无 `no such table`。
 
+### 发布前 UI 收口（首次初始化体验打磨）
+- **数据初始化向导单选选中态修复**：全局 `QWidget { background-color }` 规则会抑制原生 QRadioButton
+  indicator 渲染（Windows 上表现为「圈没有颜色」）。为 `QRadioButton::indicator`（及同源的
+  `QCheckBox::indicator`）显式补充未选/悬停/选中/禁用样式，选中后填充强调色且对应方案整行加粗高亮，
+  浅色 / 深色主题下均清晰可见。仅修 UI 显示，不改分组逻辑、不改缺 Key 跳过 geoip 的逻辑、不改下载执行。
+- **状态栏 DB 长路径显示优化**：新增 `utils.paths.short_db_path()`，状态栏只显示 `...\live\intel.db`
+  形式的短路径，完整路径通过 tooltip 查看；不影响真实 `db_path`、portable/custom data_dir、
+  设置页「当前路径」完整显示。
+
 ### 版本 / 测试 / 文档
 - 正式版本号 `0.2.0`（`VERSION` 与 `python/__init__.py` `__version__`）；GUI `APP_VERSION` 保持独立（1.2.0）。
-- 测试增至 **116**（`test_setup_profiles`：预设关系 / key 门控 / 选择顺序 / 串行编排 / 失败汇总 / 取消 / 库状态检测；
-  `test_first_run_db_init`：空库建表 / portable·custom 路径解析 / 空库串行下载不再 `no such table` / 最小模式串行；零网络、零真实 key）。
+- 测试增至 **126**（`test_setup_profiles`：预设关系 / key 门控 / 选择顺序 / 串行编排 / 失败汇总 / 取消 / 库状态检测；
+  `test_first_run_db_init`：空库建表 / portable·custom 路径解析 / 空库串行下载不再 `no such table` / 最小模式串行；
+  `test_paths`：`short_db_path` 状态栏短路径格式化；零网络、零真实 key）。
 - 新增 `docs/FIRST_RUN_SETUP.md`、`docs/RELEASE_NOTES_v0.2.0.md`；更新 README / ROADMAP / PROJECT_STATUS。
 - 仅发布 portable zip（不发布裸 exe）；不覆盖 v0.1.0；不改仓库可见性。
 

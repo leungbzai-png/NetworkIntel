@@ -251,6 +251,31 @@ QScrollBar::handle:horizontal {{ background:#D1D5DB; border-radius:5px; min-widt
 QScrollBar::handle:horizontal:hover {{ background:#9CA3AF; }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0; }}
 
+/* 单选/复选：全局 QWidget 背景规则会抑制原生 indicator 渲染（Windows 上表现为
+   「圈没有颜色」），此处显式画出未选/选中态，保证选中明显可见。 */
+QRadioButton, QCheckBox {{
+    color: #111827;
+    spacing: 8px;
+    font-size: 13px;
+    padding: 3px 2px;
+    background: transparent;
+}}
+QRadioButton:disabled, QCheckBox:disabled {{ color: #9CA3AF; }}
+QRadioButton:checked {{ color: {ACCENT}; font-weight: 600; }}
+QRadioButton::indicator, QCheckBox::indicator {{ width: 16px; height: 16px; }}
+QRadioButton::indicator {{
+    border: 2px solid #9CA3AF; border-radius: 8px; background: #FFFFFF;
+}}
+QRadioButton::indicator:hover {{ border-color: {ACCENT}; }}
+QRadioButton::indicator:checked {{ border: 2px solid {ACCENT}; background: {ACCENT}; }}
+QRadioButton::indicator:disabled {{ border-color: #D1D5DB; background: #F3F4F6; }}
+QCheckBox::indicator {{
+    border: 2px solid #9CA3AF; border-radius: 4px; background: #FFFFFF;
+}}
+QCheckBox::indicator:hover {{ border-color: {ACCENT}; }}
+QCheckBox::indicator:checked {{ border: 2px solid {ACCENT}; background: {ACCENT}; }}
+QCheckBox::indicator:disabled {{ border-color: #D1D5DB; background: #F3F4F6; }}
+
 #StatusBar {{
     background-color: #FAFAFA;
     border-top: 1px solid #E5E7EB;
@@ -344,6 +369,22 @@ QScrollBar::handle:vertical:hover {{ background: #3B445C; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QScrollBar:horizontal {{ background: transparent; height:10px; margin:0; }}
 QScrollBar::handle:horizontal {{ background:#2C3447; border-radius:5px; min-width:30px; }}
+
+/* 单选/复选 indicator（深色主题）：保证选中态在深色背景下仍清晰可见。 */
+QRadioButton, QCheckBox {{
+    color: #E5E7EB; spacing: 8px; font-size: 13px; padding: 3px 2px; background: transparent;
+}}
+QRadioButton:disabled, QCheckBox:disabled {{ color: #6B7280; }}
+QRadioButton:checked {{ color: #60A5FA; font-weight: 600; }}
+QRadioButton::indicator, QCheckBox::indicator {{ width: 16px; height: 16px; }}
+QRadioButton::indicator {{ border: 2px solid #4B5563; border-radius: 8px; background: #161B26; }}
+QRadioButton::indicator:hover {{ border-color: {ACCENT}; }}
+QRadioButton::indicator:checked {{ border: 2px solid {ACCENT}; background: {ACCENT}; }}
+QRadioButton::indicator:disabled {{ border-color: #2C3447; background: #1B2130; }}
+QCheckBox::indicator {{ border: 2px solid #4B5563; border-radius: 4px; background: #161B26; }}
+QCheckBox::indicator:hover {{ border-color: {ACCENT}; }}
+QCheckBox::indicator:checked {{ border: 2px solid {ACCENT}; background: {ACCENT}; }}
+QCheckBox::indicator:disabled {{ border-color: #2C3447; background: #1B2130; }}
 
 #StatusBar {{ background-color:#0B0D11; border-top: 1px solid #1F2330; color:#9CA3AF; font-size:12px; }}
 #Badge {{ border-radius: 10px; padding: 2px 10px; font-size: 11px; font-weight: 600; color:#FFFFFF; }}
@@ -2117,7 +2158,12 @@ class MainWindow(QMainWindow):
         self.cfg_label = QLabel("")
         try:
             cfg = get_config()
-            self.cfg_label.setText(f"v{APP_VERSION}  ·  DB: {cfg.db_path}")
+            from utils.paths import short_db_path
+            # 状态栏只显示短路径，避免长路径挤压主界面；完整路径放 tooltip，
+            # 真实 db_path 与设置页「当前路径」不受影响。
+            self.cfg_label.setText(
+                f"v{APP_VERSION}  ·  DB: {short_db_path(cfg.db_path)}")
+            self.cfg_label.setToolTip(cfg.db_path)
         except Exception:
             self.cfg_label.setText(f"v{APP_VERSION}")
         sbl.addWidget(self.cfg_label)

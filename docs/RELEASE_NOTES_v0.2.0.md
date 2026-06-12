@@ -48,6 +48,14 @@ v0.2.0 解决的是「**怎么把它装到任意机器、任意目录，并完�
 - **MaxMind/GeoIP 需要 `MAXMIND_LICENSE_KEY`**，缺 key 时该源被**自动跳过并给出提示**（绝不读取/打印 key）。
 - 下载**串行执行**（逐个 `plugin.update()`），规避空库并发写的 `database is locked`；单源失败汇总后继续，不让 GUI 崩溃。
 
+### 5. First-Run Setup UI 打磨（发布前体验收口）
+- **方案选择单选选中态修复**：全局 `QWidget` 背景样式会抑制原生 QRadioButton indicator 渲染
+  （Windows 上「圈没有颜色」）。现为单选/复选 indicator 显式补充样式：选中后填充强调色，
+  对应方案整行加粗高亮，浅色 / 深色主题下均清晰可见。切换方案时下方「将下载 X 个数据源 /
+  缺 Key 跳过」区域照常实时更新；**分组逻辑、缺 MaxMind Key 跳过 geoip 逻辑、下载执行逻辑均未改动**。
+- **状态栏 DB 长路径显示优化**：状态栏改为显示 `...\live\intel.db` 形式的短路径，鼠标悬停 tooltip
+  显示完整路径。真实 `db_path`、portable/custom data_dir、设置页「当前路径」完整显示均不受影响。
+
 ---
 
 ## 本次收口修复（阻断级）
@@ -115,9 +123,10 @@ v0.2.0 解决的是「**怎么把它装到任意机器、任意目录，并完�
 
 ## 测试
 
-- **116 / 116 passed**，默认零网络、零真实 key 输出。
+- **126 / 126 passed**，默认零网络、零真实 key 输出。
 - 新增覆盖：空库 `needs_setup`、`prepare_database` 建表、portable/custom 数据目录解析、
-  空库串行下载不再 `no such table`、最小模式串行执行、缺 MaxMind key 跳过 geoip。
+  空库串行下载不再 `no such table`、最小模式串行执行、缺 MaxMind key 跳过 geoip、
+  状态栏 `short_db_path` 长路径缩短格式化。
 - Phase 1 portable 测试与 Phase 2 数据源选择测试全部保留通过。
 
 ---

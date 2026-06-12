@@ -82,6 +82,30 @@ def test_resolve_legacy_absolute_nonexistent_falls_back():
             assert paths.resolve_runtime_path(legacy, default, d) == default
 
 
+def test_short_db_path_shortens_long_path():
+    # 长路径只保留尾部两级并加省略号，供状态栏显示。
+    long_path = os.sep.join(
+        ["D:", "Test", "NetworkIntel-v0.2.0-smoke",
+         "NetworkIntel-v0.2.0-windows-x64-portable", "live", "intel.db"])
+    short = paths.short_db_path(long_path)
+    assert short == "..." + os.sep + os.sep.join(["live", "intel.db"])
+    # 缩短后仍能从原始完整路径取到真实值（tooltip / 设置页用）。
+    assert long_path.endswith(os.sep.join(["live", "intel.db"]))
+
+
+def test_short_db_path_keep_param():
+    p = os.sep.join(["D:", "a", "b", "live", "intel.db"])
+    assert paths.short_db_path(p, keep=3) == "..." + os.sep + os.sep.join(
+        ["b", "live", "intel.db"])
+
+
+def test_short_db_path_short_input_unchanged():
+    # 层级数不超过 keep 时原样返回，不加省略号。
+    assert paths.short_db_path("intel.db") == "intel.db"
+    assert paths.short_db_path("") == ""
+    assert paths.short_db_path(None) == ""
+
+
 def test_ensure_runtime_dirs():
     with isolated_env(), temp_dir() as d:
         os.environ["NETWORKINTEL_HOME"] = str(d)

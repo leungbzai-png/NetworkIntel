@@ -43,7 +43,7 @@
 
 ## 3. 当前测试数量
 
-**116 / 116 passed**（`python tests/run_tests.py`）。覆盖：portable 路径解析、首次运行初始化、
+**126 / 126 passed**（`python tests/run_tests.py`）。覆盖：portable 路径解析、首次运行初始化、
 key 存储（.env，不入 yaml）、数据目录 portable/custom、配置加载、Provider 注册表、
 bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 / 清零 / reset）、online_runner、模板、
 **数据源预设分组 / key 门控 / 选择顺序 / 串行下载编排与失败汇总 / 取消 / 数据库状态检测**、

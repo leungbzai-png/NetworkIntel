@@ -226,6 +226,24 @@ def ensure_runtime_dirs() -> None:
         (data_dir / sub).mkdir(parents=True, exist_ok=True)
 
 
+def short_db_path(path: Optional[str], keep: int = 2) -> str:
+    """
+    把完整 DB 路径缩短为状态栏可读的尾段形式，例如 ``...\\live\\intel.db``。
+
+    仅用于 UI 展示，**不改变任何真实 db_path / data_dir**：完整路径仍可通过状态栏
+    tooltip 或设置页「当前路径」查看。``keep`` 控制保留的尾部层级数（默认 2）。
+    路径层级数不超过 ``keep`` 时原样返回（不加省略号）。
+    """
+    if not path:
+        return ""
+    p = Path(str(path))
+    parts = p.parts
+    if len(parts) <= keep:
+        return str(p)
+    tail = os.sep.join(parts[-keep:])
+    return "..." + os.sep + tail
+
+
 def describe() -> dict:
     """返回当前路径解析结果，便于 GUI 展示与调试（不含任何 key）。"""
     return {

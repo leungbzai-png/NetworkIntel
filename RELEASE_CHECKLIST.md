@@ -17,7 +17,7 @@
 - [ ] 仓库体积合理（无意外的二进制/数据大文件混入）。
 
 ## C. 测试
-- [ ] `python tests/run_tests.py` → **116/116 passed, 0 failed**（或随版本递增后的全绿）。
+- [ ] `python tests/run_tests.py` → **126/126 passed, 0 failed**（或随版本递增后的全绿）。
 - [ ] 测试默认**零网络**、输出**无真实 key**。
 
 ## D. 入口可运行
