@@ -1,7 +1,8 @@
-NetworkIntel v0.2.0 — Portable Windows x64（测试版 / RUNNING.txt）
+NetworkIntel v0.3.0 — Portable Windows x64（测试版 / RUNNING.txt）
 ============================================================
 
-1. 这是 NetworkIntel v0.2.0 Portable Windows x64 测试版。
+1. 这是 NetworkIntel v0.3.0 Portable Windows x64 测试版。
+   （v0.3.0：数据源更新走统一串行队列，「全部更新」进行中再次点击会提示任务正在执行。）
 
 2. 可解压到任意目录运行（不再锁定 E:\NetworkIntel）。
 
@@ -28,6 +29,6 @@ NetworkIntel v0.2.0 — Portable Windows x64（测试版 / RUNNING.txt）
 ------------------------------------------------------------
 更多说明见随包文档：
   README.md
-  docs/RELEASE_NOTES_v0.2.0.md
+  docs/RELEASE_NOTES_v0.3.0.md
   docs/FIRST_RUN_SETUP.md
   docs/PORTABLE_MODE.md
