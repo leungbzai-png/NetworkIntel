@@ -1,7 +1,24 @@
 # SQLite 并发写入 — 优先级待办（SQLITE_CONCURRENCY_TODO.md）
 
-> 配套审计：`docs/SQLITE_CONCURRENCY_AUDIT.md`。本清单仅规划，**当前未实施**（受「只审计」约束）。
-> 原则：下载并发保留，**仅 SQLite 写入串行化**；不改表结构，不引入外部数据库。
+> 配套审计：`docs/SQLITE_CONCURRENCY_AUDIT.md`。
+> **状态：v0.3.0 已全部落地 ✅**（P0~P4）。见 `docs/RELEASE_NOTES_v0.3.0.md`。
+> 说明：v0.3.0 采用比原方案更彻底的**统一更新协调器（单 worker 写入队列）**替代
+> 「trigger_all 串行化」与「模块级写锁」——单写者队列天然满足串行化，无需再加写锁。
+> 原则：下载在协调器串行执行（以稳定换速度），**SQLite 写入严格串行化**；不改表结构，不引入外部数据库。
+
+## v0.3.0 落地对照
+
+| 优先级 | 任务 | 落地情况 |
+|---|---|---|
+| **P0** | `busy_timeout` | ✅ `utils/schema.py` 统一 `connect_read/connect_write` 均设 `busy_timeout=30000`（+ `foreign_keys=ON`、WAL 优雅回退）；`schema_v6` 与在线缓存同步 |
+| **P1** | 写串行化 | ✅ 新增 `python/update_coordinator.py` 单 worker 队列，GUI/调度器/CLI/首次初始化统一入队；`scheduler.trigger_*` 不再自起写库线程 |
+| **P2** | 事务原子化 | ✅ `datasources/base.py::_bulk_insert` 单连接单事务（`BEGIN IMMEDIATE` → `DELETE+INSERT` → `COMMIT`/`ROLLBACK`）；7 个插件 `load()` 改用 `replace_source=True` |
+| **P3** | 错误日志分类 | ✅ `update()` 识别 `error_type=db_locked`，脱敏 traceback；`query/engine.py::_save_history` 不再裸 `except: pass`（改 `logger.debug` 且区分锁冲突）；`redaction.py` 防 key 泄露。**遗留（低）**：`gui_extensions.py` 只读侧对 `OperationalError` 的静默吞咽属 GUI，未在本轮改动，仅记录 |
+| **P4** | 压测/回归 | ✅ 以确定性并发测试替代随机压测：`test_update_queue_concurrency`（峰值并发==1）等，全量 165/165 |
+
+---
+
+## 原始清单（保留作对照）
 
 | 优先级 | 任务 | 触及文件 | 风险 | 验收标准 |
 |---|---|---|---|---|

@@ -192,9 +192,23 @@ def ensure_runtime_database(db_path: Optional[str] = None) -> str:
 # ── 串行下载执行器（可注入，便于零网络测试）────────────────────
 
 def _default_updater(name: str, progress_cb: Callable) -> dict:
-    """默认执行器：实例化插件并执行 update（真实下载落库）。"""
-    from datasources.plugin_registry import get_plugin
-    return get_plugin(name).update(progress_callback=progress_cb)
+    """
+    默认执行器：把源投递到统一协调器（进程内单写者），阻塞等待完成。
+
+    v0.3.0：首次初始化不再直接调用 plugin.update()，而是复用与 GUI/调度器/CLI
+    同一套写库执行层。这样即便初始化向导运行时调度器 cron 恰好触发同一源，
+    也由协调器串行/去重，绝不并发写 intel.db。
+    """
+    from update_coordinator import get_coordinator, UpdateTrigger, UpdateState
+    job = get_coordinator().enqueue_source(name, UpdateTrigger.FIRST_RUN)
+    job.wait()
+    return {
+        "success": job.status == UpdateState.SUCCESS,
+        "record_count": job.records_loaded,
+        "error": None if job.status == UpdateState.SUCCESS else job.message,
+        "error_type": job.error_type,
+        "duration_seconds": job.duration_seconds,
+    }
 
 
 def download_sources(

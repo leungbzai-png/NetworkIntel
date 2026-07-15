@@ -1,6 +1,12 @@
 # SQLite 并发写入审计（SQLITE_CONCURRENCY_AUDIT.md）
 
-> **本文档仅审计、仅出方案，不修改任何源码。** 审计对象为主库 `live/intel.db` 的写入链路。
+> **状态更新（v0.3.0）**：本审计所列 R1~R5 风险已全部修复。修复方式见
+> `docs/RELEASE_NOTES_v0.3.0.md` 与 `docs/SQLITE_CONCURRENCY_TODO.md` 的「v0.3.0 落地对照」。
+> 采用**统一更新协调器（单 worker 写入队列）** 作为根治手段（比原 §5 的「全局写锁 / trigger_all 串行化」
+> 更彻底：单写者队列同时覆盖 GUI 手动/全部更新、调度器、CLI、首次初始化五个入口）。
+> 以下原文保留作为背景与设计依据。
+>
+> **本文档（原始版本）仅审计、仅出方案，不修改任何源码。** 审计对象为主库 `live/intel.db` 的写入链路。
 > 审计日期：2026-06-11 · 审计范围：`do_update.py` / `do_update_v6.py` / `scheduler/scheduler.py` /
 > `datasources/{base,plugin_registry}.py` / `datasources/plugins/*` / `utils/schema.py` / `query/engine.py`。
 

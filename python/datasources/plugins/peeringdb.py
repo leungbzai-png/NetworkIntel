@@ -58,14 +58,9 @@ class PeeringDBSource(DataSourceBase):
             "info_prefixes4", "info_prefixes6", "policy_general",
             "ix_list", "source", "snapshot_date",
         ]
-        from utils.schema import get_connection
-        conn = get_connection(self.config.db_path)
-        conn.execute("DELETE FROM peeringdb WHERE source = ?", (self.SOURCE_NAME,))
-        conn.commit()
-        conn.close()
-
         count = 0
-        with self._bulk_insert("peeringdb", columns) as insert:
+        # 删旧 + 插新在同一事务内原子完成（replace_source=True），失败整体回滚。
+        with self._bulk_insert("peeringdb", columns, replace_source=True) as insert:
             for rec in records:
                 insert(rec)
                 count += 1

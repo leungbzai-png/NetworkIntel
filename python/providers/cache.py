@@ -91,8 +91,11 @@ class OnlineCache:
     def _connect(self) -> Optional[sqlite3.Connection]:
         try:
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(self.db_path)
+            # 独立缓存库（cache/online_cache.sqlite，非主库 intel.db）。
+            # 统一给 busy_timeout，避免与其它进程/线程访问缓存时立即报锁。
+            conn = sqlite3.connect(self.db_path, timeout=30.0)
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=30000")
             return conn
         except Exception as e:
             self.last_error = f"{type(e).__name__}: {e}"

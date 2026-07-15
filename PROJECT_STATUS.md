@@ -1,6 +1,13 @@
 # 项目状态（PROJECT_STATUS.md）
 
-> 快照日期：**2026-06-11** · 公开版本：**v0.2.0**（Portable Runtime + 首次初始化向导，见 [`ROADMAP.md`](ROADMAP.md) / [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md) / [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md)）。
+> 快照日期：**2026-07-15** · 公开版本：**v0.3.0**（串行化 SQLite 更新队列，见
+> [`ROADMAP.md`](ROADMAP.md) / [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md) /
+> [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)）。
+>
+> **v0.3.0 要点**：统一更新协调器（进程内单 worker 写入队列）根治「全部更新 / 调度撞点」并发写
+> `database is locked`；连接统一 `busy_timeout` + WAL + `foreign_keys`；每源刷新单事务原子化；
+> 锁错误分类 + 有限重试 + 脱敏。GUI/调度器/CLI/首次初始化统一入队。**不改 `query_ip`、不改表结构、
+> 不换 SQLite、不新增 Provider、不做 UI 重构。** 测试 165/165。
 
 ---
 
@@ -43,7 +50,8 @@
 
 ## 3. 当前测试数量
 
-**126 / 126 passed**（`python tests/run_tests.py`）。覆盖：portable 路径解析、首次运行初始化、
+**165 / 165 passed**（`python tests/run_tests.py` 与 `python -m pytest` 等价）。
+v0.3.0 新增 5 个测试文件（更新协调器 / 队列并发 / 连接策略 / 事务原子性 / 调度协调）。覆盖：portable 路径解析、首次运行初始化、
 key 存储（.env，不入 yaml）、数据目录 portable/custom、配置加载、Provider 注册表、
 bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 / 清零 / reset）、online_runner、模板、
 **数据源预设分组 / key 门控 / 选择顺序 / 串行下载编排与失败汇总 / 取消 / 数据库状态检测**、
@@ -71,25 +79,25 @@ bgpview/ipinfo/ip2location/abuseipdb、cache、ratelimit（含 per_day / 熔断 
 
 ## 6. 当前风险点
 
-| 风险 | 等级 | 说明 | 去处 |
+| 风险 | 等级 | 说明 | 状态 |
 |---|---|---|---|
-| GUI/调度「全部更新」并发写库 | **高** | `trigger_all` 起 ~17 线程并发写 `intel.db` | `docs/SQLITE_CONCURRENCY_AUDIT.md` |
-| `get_connection` 无 `busy_timeout` | **高** | 锁冲突立即抛 `database is locked`，随机源 status=error | TODO P0 |
-| 定时任务撞点（6 云源同 cron） | 中 | 每月 1 日 04:00 并发写 | TODO P1 |
-| `load()` DELETE/INSERT 非原子 | 中 | 中途失败留空窗 | TODO P2 |
-| `query_history` / GUI 对锁错误静默吞咽 | 低 | 历史行可能悄悄丢失 | TODO P3 |
+| GUI/调度「全部更新」并发写库 | ~~高~~ | 旧 `trigger_all` 起 ~17 线程并发写 | ✅ v0.3.0 修复：统一协调器单写者队列 |
+| `get_connection` 无 `busy_timeout` | ~~高~~ | 旧连接锁冲突立即抛 `database is locked` | ✅ v0.3.0 修复：统一 `busy_timeout=30000` |
+| 定时任务撞点（6 云源同 cron） | ~~中~~ | 每月 1 日 04:00 并发写 | ✅ v0.3.0 修复：调度器入队去重 + 串行 |
+| `load()` DELETE/INSERT 非原子 | ~~中~~ | 旧路径中途失败留空窗 | ✅ v0.3.0 修复：单事务原子替换 |
+| 跨进程（GUI 与 `update.bat` 同跑）撞锁 | 低 | 进程内队列不覆盖跨进程 | 兜底：busy_timeout + 事务 + 有限重试；见发布说明「已知边界」 |
 | ThreatFox 仍骨架 | 低 | 不影响现有功能 | ROADMAP |
 
-> CLI 串行更新（`update.bat`）**不受**上述并发风险影响；离线**读**因 WAL 读写分离亦不受影响。
+> CLI 串行更新（`update.bat`）与离线**读**（WAL 读写分离）本就安全；v0.3.0 后进程内写入并发已根治。
 
 ---
 
 ## 7. 下一步优先级
 
-1. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout(P0) → 写锁/writer 队列(P1) → 事务原子化(P2)。
-   注：v0.2.0 首次初始化向导已用**串行**下载规避空库并发写，但「全部更新」并发路径仍待根治。
+1. ~~**v0.3.0 SQLite 写入串行化**~~ ✅ 已完成（统一更新协调器 + busy_timeout/WAL + 事务原子化 + 锁分类）。
 2. **v0.4.0 可选 online enrichment**：独立 `enrich()`，可关闭，不动 `query_ip`。
 3. 补齐 ThreatFox 真实实现（旁路）。
+4. （可选）跨进程更新锁 / 「下载并发 + 写入串行」流水线——仅在确有需要且不破坏 portable 模式时评估。
 
 ---
 

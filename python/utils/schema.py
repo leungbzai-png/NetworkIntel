@@ -4,6 +4,9 @@ NetworkIntel - SQLite Schema
 新增数据源只需在对应插件里调用已有表或创建新表，不需要改此文件核心结构
 """
 
+import os
+import sqlite3
+
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
@@ -241,27 +244,121 @@ CREATE TABLE IF NOT EXISTS batch_jobs (
 """
 
 
+# ============================================================
+# 统一连接策略（v0.3.0 SQLite 写入串行化）
+# ============================================================
+# 所有主库连接都必须经过下面的工厂获取，统一应用：
+#   - timeout / PRAGMA busy_timeout：锁冲突时等待重试而非立即失败
+#   - PRAGMA journal_mode=WAL：读写分离（失败时优雅回退，不阻断启动）
+#   - PRAGMA synchronous=NORMAL / foreign_keys=ON
+# 读连接与写连接分开：写连接 isolation_level=None（autocommit），
+# 以便由调用方显式 `BEGIN IMMEDIATE ... COMMIT/ROLLBACK` 控制事务边界。
+# 连接**不跨线程共享**：每个线程各自 connect / close。
+
+# busy_timeout（毫秒）：写者遇锁最多等待这么久再放弃。可用环境变量覆盖（便于测试）。
+# 以下取值走函数动态读取环境变量，使测试可在 import 之后临时收紧超时，无需关心导入顺序。
+_DEFAULT_BUSY_TIMEOUT_MS = 30000
+_DEFAULT_LOCK_RETRIES = 3
+_DEFAULT_LOCK_BACKOFF_S = 0.5
+
+
+def busy_timeout_ms() -> int:
+    return int(os.environ.get("NETWORKINTEL_SQLITE_BUSY_TIMEOUT_MS",
+                              str(_DEFAULT_BUSY_TIMEOUT_MS)))
+
+
+def connect_timeout_s() -> float:
+    return max(0.2, busy_timeout_ms() / 1000.0)
+
+
+def lock_retries() -> int:
+    return int(os.environ.get("NETWORKINTEL_SQLITE_LOCK_RETRIES",
+                              str(_DEFAULT_LOCK_RETRIES)))
+
+
+def lock_backoff_s() -> float:
+    return float(os.environ.get("NETWORKINTEL_SQLITE_LOCK_BACKOFF_S",
+                                str(_DEFAULT_LOCK_BACKOFF_S)))
+
+
+# 向后兼容常量（评估一次）；动态路径请用上面的函数。
+BUSY_TIMEOUT_MS = busy_timeout_ms()
+CONNECT_TIMEOUT_S = connect_timeout_s()
+
+
+def is_locked_error(exc: BaseException) -> bool:
+    """判断异常是否为 SQLite 锁冲突（database is locked / busy）。"""
+    if not isinstance(exc, sqlite3.OperationalError):
+        return False
+    msg = str(exc).lower()
+    return "database is locked" in msg or "database is busy" in msg
+
+
+def _apply_common_pragmas(conn) -> None:
+    """应用所有连接共用的 PRAGMA；WAL 失败时优雅回退并告警。"""
+    conn.execute(f"PRAGMA busy_timeout={busy_timeout_ms()}")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA cache_size=-64000")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    # WAL 通过返回值判断是否生效（PRAGMA 不抛异常而是返回实际模式）。
+    try:
+        row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+        mode = (row[0] if row else "") or ""
+        if str(mode).lower() != "wal":
+            _warn_wal_fallback(str(mode))
+    except sqlite3.OperationalError as e:
+        # 极端情况下（如某些网络盘）设置 WAL 会抛错：记录告警但不阻断，
+        # busy_timeout 仍已生效，退回默认 journal 模式继续工作。
+        _warn_wal_fallback(f"error: {e}")
+
+
+def _warn_wal_fallback(mode: str) -> None:
+    try:
+        from utils.logger import get_logger
+        get_logger("networkintel").warning(
+            f"[sqlite] WAL 未生效，已回退到 journal_mode={mode}；"
+            f"busy_timeout={BUSY_TIMEOUT_MS}ms 仍已应用。"
+        )
+    except Exception:
+        pass
+
+
 def init_db(db_path: str) -> None:
     """初始化数据库，创建所有表和索引"""
-    import sqlite3
-    import os
-
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    parent = os.path.dirname(db_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=connect_timeout_s())
     try:
+        conn.execute(f"PRAGMA busy_timeout={busy_timeout_ms()}")
         conn.executescript(SCHEMA_SQL)
         conn.commit()
     finally:
         conn.close()
 
 
-def get_connection(db_path: str):
-    """获取数据库连接，已配置性能参数"""
-    import sqlite3
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+def connect_read(db_path: str):
+    """只读/一般查询连接。带 busy_timeout 与 WAL，row_factory=Row。"""
+    conn = sqlite3.connect(db_path, timeout=connect_timeout_s(),
+                           check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA cache_size=-64000")
-    conn.execute("PRAGMA temp_store=MEMORY")
+    _apply_common_pragmas(conn)
     return conn
+
+
+def connect_write(db_path: str):
+    """
+    写连接：isolation_level=None（autocommit）以便调用方显式控制事务
+    （BEGIN IMMEDIATE ... COMMIT/ROLLBACK）。带 busy_timeout 与 WAL。
+    """
+    conn = sqlite3.connect(db_path, timeout=connect_timeout_s(),
+                           check_same_thread=False, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    _apply_common_pragmas(conn)
+    return conn
+
+
+def get_connection(db_path: str):
+    """向后兼容别名：只读/一般查询连接（等价 connect_read）。"""
+    return connect_read(db_path)

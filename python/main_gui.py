@@ -1078,6 +1078,8 @@ class BatchPage(QWidget):
 SOURCE_STATUS_COLORS = {
     "ok": "#16A34A", "running": "#2563EB", "error": "#DC2626",
     "stale": "#D97706", "never": "#9CA3AF", "idle": "#9CA3AF",
+    # v0.3.0 协调器状态
+    "queued": "#7C3AED", "skipped": "#6B7280",
 }
 
 
@@ -1179,8 +1181,15 @@ class SourcesPage(QWidget):
         bar.addWidget(self.btn_refresh)
         bar.addWidget(self.btn_setup)
         bar.addStretch(1)
+        # 队列进度/汇总（全部更新时显示当前源、完成数、最终汇总）
+        self.lbl_progress = QLabel("")
+        self.lbl_progress.setObjectName("PageSubtitle")
+        bar.addWidget(self.lbl_progress)
         bar.addWidget(self.btn_update_all)
         root.addLayout(bar)
+
+        # 本次「全部更新」批次任务句柄（用于展示进度/汇总）
+        self._batch_jobs = []
 
         # 表（必须在 _build 内创建并 add 到 layout；
         # 历史回归曾把本段误置于 _open_setup，导致 self.table 从未创建、
@@ -1268,6 +1277,12 @@ class SourcesPage(QWidget):
             except Exception as e:
                 print("[SourcesPage.refresh] 行渲染失败:", r.get("name"), e)
 
+        # 队列进度/汇总 + 「全部更新」按钮可用性（协调器状态驱动）
+        try:
+            self._update_progress_label()
+        except Exception as e:
+            print("[SourcesPage.refresh] 进度刷新失败:", e)
+
     def _on_double_click(self, idx):
         row = idx.row()
         item = self.table.item(row, 0)
@@ -1284,17 +1299,61 @@ class SourcesPage(QWidget):
                 QMessageBox.critical(self, "失败", str(e))
             self.refresh()
 
+    def _coordinator(self):
+        from update_coordinator import get_coordinator
+        return get_coordinator()
+
     def _update_all(self):
+        # 队列进行中再次点击：明确提示，绝不创建第二套并行队列。
+        try:
+            if self._coordinator().is_busy():
+                QMessageBox.information(
+                    self, "更新进行中",
+                    "更新任务正在执行，请等待当前队列完成后再试。")
+                return
+        except Exception:
+            pass
         if QMessageBox.question(
-            self, "全部更新", "确定立即触发所有已启用数据源的更新？\n（在后台执行，可能耗时较长）",
+            self, "全部更新", "确定立即触发所有已启用数据源的更新？\n（在后台串行执行，可能耗时较长）",
             QMessageBox.Yes | QMessageBox.No
         ) != QMessageBox.Yes:
             return
         try:
-            get_scheduler().trigger_all()
+            # 统一走协调器串行队列（scheduler.trigger_all 内部已委派协调器）
+            self._batch_jobs = get_scheduler().trigger_all() or []
         except Exception as e:
             QMessageBox.critical(self, "失败", str(e))
         self.refresh()
+
+    def _update_progress_label(self):
+        """根据本次批次任务与协调器状态刷新进度/汇总文案与按钮可用性。"""
+        coord = None
+        busy = False
+        try:
+            coord = self._coordinator()
+            busy = coord.is_busy()
+        except Exception:
+            busy = False
+        # 按钮在队列进行中禁用
+        self.btn_update_all.setEnabled(not busy)
+
+        jobs = self._batch_jobs or []
+        if not jobs:
+            self.lbl_progress.setText("")
+            return
+        from update_coordinator import UpdateState
+        total = len(jobs)
+        done = sum(1 for j in jobs if j.is_done)
+        if busy or done < total:
+            running = coord.running_source() if coord else None
+            cur = f"当前：{running}  " if running else ""
+            self.lbl_progress.setText(f"更新中 {cur}{done}/{total}")
+        else:
+            ok = sum(1 for j in jobs if j.status == UpdateState.SUCCESS)
+            failed = sum(1 for j in jobs if j.status == UpdateState.FAILED)
+            skipped = sum(1 for j in jobs if j.status == UpdateState.SKIPPED)
+            self.lbl_progress.setText(
+                f"完成：成功 {ok} / 失败 {failed} / 跳过 {skipped}（共 {total}）")
 
 
 # ╔════════════════════════════════════════════════════════════╗

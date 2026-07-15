@@ -116,8 +116,10 @@ def init_v6_tables(db_path: str) -> None:
     """初始化IPv6相关表"""
     import sqlite3, os
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    from utils.schema import BUSY_TIMEOUT_MS, CONNECT_TIMEOUT_S
+    conn = sqlite3.connect(db_path, timeout=CONNECT_TIMEOUT_S)
     try:
+        conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         conn.executescript(SCHEMA_V6_SQL)
         conn.commit()
     finally:

@@ -66,16 +66,21 @@ python -m pytest                     # 等价
 
 ## 5. 当前推荐下一步（路线优先级）
 
-> **当前进度**：**v0.2.0 已完成**（Phase 1 Portable Runtime + Phase 2 首次初始化向导 / 数据源选择串行下载）。
-> 版本标识 `0.2.0`。Portable 细节见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)；
-> 首次初始化见 [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md)。
+> **当前进度**：**v0.3.0 已完成**（串行化 SQLite 更新队列）。版本标识 `0.3.0`。
+> 写入并发根治见 [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md)；
+> Portable 见 [`docs/PORTABLE_MODE.md`](docs/PORTABLE_MODE.md)；首次初始化见 [`docs/FIRST_RUN_SETUP.md`](docs/FIRST_RUN_SETUP.md)。
 
-1. **v0.3.0 SQLite 写入串行化**（审计已就绪）：busy_timeout → 写锁或 writer queue →
-   事务原子化 → 错误分类 → 压测。按 `docs/SQLITE_CONCURRENCY_TODO.md` 分步、每步独立可回滚。
-   注：v0.2.0 首次初始化向导已用串行下载规避空库并发写，但「全部更新」并发路径仍待根治。
+> **v0.3.0 写入协调红线（新）**：所有数据源写库**必须**经 `update_coordinator.get_coordinator()`
+> 入队执行（GUI/调度器/CLI/首次初始化都已如此）。**不要**再新起后台线程直接调用 `plugin.update()` 或直接写
+> `intel.db`——那会绕过单写者、重新引入 `database is locked`。写连接统一走 `utils/schema.connect_write`
+> 并显式 `BEGIN IMMEDIATE`；只读走 `connect_read`/`get_connection`。
+
+1. ~~**v0.3.0 SQLite 写入串行化**~~ ✅ 已完成（统一更新协调器 + busy_timeout/WAL/foreign_keys +
+   事务原子化 + 锁错误分类/脱敏；见 `docs/SQLITE_CONCURRENCY_TODO.md` 的「v0.3.0 落地对照」）。
 2. **v0.4.0 可选 online enrichment 接入 GUI**：独立 `enrich()` 模块，可关闭，不改 `query_ip`。
 3. **v0.5.0 Provider 状态页**；**v1.0.0 稳定版**。
 4. 旁路补全：**ThreatFox** 真实实现（参考 abuseipdb）。
+5. （可选）跨进程更新锁 / 「下载并发 + 写入串行」流水线——仅在确有需要且不破坏 portable 时评估。
 
 > 路线与 `README.md` / `ROADMAP.md` / `PROJECT_STATUS.md` 保持一致：v0.2.0=Portable（Phase1）+ 首次向导/数据源选择/发布包（Phase2），
 > v0.3.0=SQLite 串行化，v0.4.0=enrichment 接入 GUI，v0.5.0=Provider 状态页，v1.0.0=稳定版。
@@ -110,7 +115,8 @@ git diff | findstr /I "api_key token license_key"
 
 | commit | 说明 |
 |---|---|
-| `feat: first-run setup wizard and data source download (v0.2.0 Phase 2)` | 本轮（v0.2.0 正式版）：`datasources/setup_profiles.py`（预设/自定义选择 + 缺 Key 门控 + 数据库状态检测 + **串行**下载执行器，可注入）；GUI `FirstRunSetupDialog`（首次缺库自动弹出、可关闭、进度/失败汇总）；版本号改 `0.2.0`；测试增至 110；新增 `docs/FIRST_RUN_SETUP.md` |
+| `feat: serialize sqlite updates with coordinated queue` | 本轮（v0.3.0）：新增 `python/update_coordinator.py`（单 worker 写入队列，GUI/调度器/CLI/首次初始化统一入队、同源去重、失败隔离、状态机、shutdown 不挂死）；`utils/schema.py` 统一 `connect_read/connect_write`（busy_timeout/WAL/foreign_keys、写连接 autocommit + `BEGIN IMMEDIATE`）；`datasources/base.py` 事务原子化（`_bulk_insert` 单事务 + `replace_source`，7 插件 `load()` 迁移）+ 锁分类；`utils/redaction.py` 脱敏；版本 `0.3.0`；测试增至 165 |
+| `feat: first-run setup wizard and data source download (v0.2.0 Phase 2)` | v0.2.0 正式版：`datasources/setup_profiles.py`（预设/自定义选择 + 缺 Key 门控 + 数据库状态检测 + **串行**下载执行器，可注入）；GUI `FirstRunSetupDialog`（首次缺库自动弹出、可关闭、进度/失败汇总）；版本号改 `0.2.0`；测试增至 110；新增 `docs/FIRST_RUN_SETUP.md` |
 | `feat: add portable runtime and key settings` | v0.2.0 Phase 1：统一 `utils/paths.py` portable 路径系统；任意目录运行；首次运行自动建目录/模板；GUI key 设置 + 数据目录 portable/custom；模板与 `.bat` 去硬编码；测试增至 95 |
 | `docs: finalize project handoff and sqlite concurrency audit` | 项目文档收尾 + SQLite 并发审计（只审计未改源码） |
 | `feat: add abuseipdb provider with rate limit safeguards` | AbuseIPDB 旁路实现；限速增强（per_day=900、连续 429 熔断）；测试增至 76 |

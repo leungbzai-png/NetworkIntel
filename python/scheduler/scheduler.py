@@ -1,11 +1,15 @@
 """
-NetworkIntel - APScheduler 调度器
-管理所有数据源的定期更新任务
-支持：cron调度、手动触发、任务状态查询
+NetworkIntel - APScheduler 调度器（v0.3.0：统一走 UpdateCoordinator）
+=====================================================================
+调度器**不再**自己起写库线程。cron 任务、手动触发、「全部更新」全部投递到
+``update_coordinator``（单消费线程串行写库），因此：
+  * 手动「全部更新」进行中时，定时任务不会并发写库——重复源被跳过、其余排队。
+  * 调度器 job 只负责「入队」，不阻塞、不写库；单任务失败不会拖垮调度线程。
+本模块保留旧的 ``register_update_callback`` / ``get_job_status`` 接口，供 TUI/GUI
+沿用；其数据来源改为协调器。
 """
 
 import threading
-from datetime import datetime
 from typing import Callable, Optional, Dict, Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -14,18 +18,21 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 
 from utils.config_loader import get_config, reload_config
 from utils.logger import get_logger
+from update_coordinator import (
+    get_coordinator, UpdateTrigger, UpdateState, LEGACY_STATUS,
+)
 
 logger = get_logger("networkintel")
 
-# 全局任务状态追踪
-_job_status: Dict[str, dict] = {}
-_status_lock = threading.Lock()
 _update_callbacks: list = []  # UI更新回调列表
+_listener_installed = False
+_listener_lock = threading.Lock()
 
 
 def register_update_callback(cb: Callable) -> None:
     """注册调度状态变更回调（供TUI订阅）"""
     _update_callbacks.append(cb)
+    _ensure_coordinator_listener()
 
 
 def _notify_callbacks(source_name: str, status: str, message: str = "") -> None:
@@ -36,51 +43,35 @@ def _notify_callbacks(source_name: str, status: str, message: str = "") -> None:
             pass
 
 
-def _run_source_update(source_name: str) -> None:
-    """执行单个数据源更新"""
+def _coordinator_listener(job) -> None:
+    """协调器任务状态变更 → 映射为旧 GUI/TUI 词表并转发。"""
+    legacy = LEGACY_STATUS.get(job.status, job.status)
+    _notify_callbacks(job.source_name, legacy, job.message)
+
+
+def _ensure_coordinator_listener() -> None:
+    """幂等安装协调器监听器（把协调器事件桥接到旧回调体系）。"""
+    global _listener_installed
+    with _listener_lock:
+        if _listener_installed:
+            return
+        get_coordinator().add_listener(_coordinator_listener)
+        _listener_installed = True
+
+
+def _scheduler_enqueue(source_name: str) -> None:
+    """
+    APScheduler cron 任务的执行体：仅把源投递到协调器（trigger=scheduler）。
+    不写库、不阻塞；若该源已 queued/running 会被协调器跳过（返回 skipped）。
+    任何异常都被吞掉并记录，绝不让调度线程死亡。
+    """
     try:
-        from datasources.plugin_registry import get_plugin
-        plugin = get_plugin(source_name)
-
-        with _status_lock:
-            _job_status[source_name] = {
-                "status": "running",
-                "started_at": datetime.now().isoformat(),
-                "message": "更新中...",
-            }
-        _notify_callbacks(source_name, "running", "更新中...")
-        logger.info(f"[调度器] 开始更新: {source_name}")
-
-        def progress(step, pct):
-            with _status_lock:
-                _job_status[source_name]["message"] = f"{step} ({pct}%)"
-            _notify_callbacks(source_name, "running", f"{step} ({pct}%)")
-
-        result = plugin.update(progress_callback=progress)
-
-        with _status_lock:
-            _job_status[source_name] = {
-                "status": "ok" if result["success"] else "error",
-                "finished_at": datetime.now().isoformat(),
-                "record_count": result.get("record_count", 0),
-                "message": f"完成，{result.get('record_count', 0)} 条记录" if result["success"]
-                           else f"失败: {result.get('error', '')}",
-                "error": result.get("error"),
-            }
-        status = "ok" if result["success"] else "error"
-        _notify_callbacks(source_name, status, _job_status[source_name]["message"])
-        logger.info(f"[调度器] {source_name} 更新{'成功' if result['success'] else '失败'}")
-
+        _ensure_coordinator_listener()
+        job = get_coordinator().enqueue_source(source_name, UpdateTrigger.SCHEDULER)
+        logger.info(f"[调度器] trigger=scheduler source={source_name} "
+                    f"-> {job.status} (job={job.job_id})")
     except Exception as e:
-        logger.error(f"[调度器] {source_name} 异常: {e}", exc_info=True)
-        with _status_lock:
-            _job_status[source_name] = {
-                "status": "error",
-                "finished_at": datetime.now().isoformat(),
-                "message": f"异常: {str(e)}",
-                "error": str(e),
-            }
-        _notify_callbacks(source_name, "error", str(e))
+        logger.error(f"[调度器] 入队失败 source={source_name}: {e}", exc_info=True)
 
 
 class IntelScheduler:
@@ -111,27 +102,27 @@ class IntelScheduler:
         logger.info(f"[调度器] 已启动，{len(self._jobs)} 个任务已注册")
 
     def stop(self) -> None:
-        """停止调度器"""
+        """停止调度器，并有序关闭协调器 worker（daemon，即使不关也不阻塞退出）。"""
         if self.scheduler.running:
             self.scheduler.shutdown(wait=False)
+        try:
+            get_coordinator().shutdown(wait=True, timeout=5.0)
+        except Exception as e:
+            logger.debug(f"[调度器] 协调器关闭异常（忽略）: {e}")
         logger.info("[调度器] 已停止")
 
-    def trigger_now(self, source_name: str) -> None:
-        """立即手动触发指定数据源更新（在后台线程执行）"""
-        t = threading.Thread(
-            target=_run_source_update,
-            args=(source_name,),
-            daemon=True,
-            name=f"update-{source_name}",
-        )
-        t.start()
+    def trigger_now(self, source_name: str, trigger: str = UpdateTrigger.MANUAL):
+        """立即手动触发指定数据源更新（投递到协调器串行队列）。返回 UpdateJob。"""
+        _ensure_coordinator_listener()
+        return get_coordinator().enqueue_source(source_name, trigger)
 
-    def trigger_all(self) -> None:
-        """立即触发所有已启用数据源更新"""
+    def trigger_all(self):
+        """立即触发所有已启用数据源更新（统一入队，写库串行、不并发）。"""
+        _ensure_coordinator_listener()
         cfg = get_config()
-        for name, scfg in cfg.get_all_sources().items():
-            if scfg.get("enabled", True):
-                self.trigger_now(name)
+        names = [name for name, scfg in cfg.get_all_sources().items()
+                 if scfg.get("enabled", True)]
+        return get_coordinator().enqueue_many(names, UpdateTrigger.UPDATE_ALL)
 
     def update_schedule(self, source_name: str, new_cron: str) -> None:
         """
@@ -151,11 +142,30 @@ class IntelScheduler:
         logger.info(f"[调度器] {source_name} 调度已更新: {new_cron}")
 
     def get_job_status(self, source_name: str = None) -> dict:
-        """获取任务状态"""
-        with _status_lock:
-            if source_name:
-                return _job_status.get(source_name, {"status": "idle"})
-            return dict(_job_status)
+        """获取任务状态（数据来源：协调器）。状态词表兼容旧 GUI/TUI。"""
+        coord = get_coordinator()
+
+        def _view(job) -> dict:
+            if job is None:
+                return {"status": "idle"}
+            return {
+                "status": LEGACY_STATUS.get(job.status, job.status),
+                "message": job.message,
+                "record_count": job.records_loaded,
+                "error": job.message if job.status == UpdateState.FAILED else None,
+                "trigger": job.trigger,
+                "started_at": job.started_at,
+                "finished_at": job.finished_at,
+            }
+
+        if source_name:
+            return _view(coord.get_source_job(source_name))
+        # 全量：返回所有已知源的最近状态
+        snap = coord.snapshot()
+        out = {}
+        for name in snap.get("sources", {}):
+            out[name] = _view(coord.get_source_job(name))
+        return out
 
     def get_next_run(self, source_name: str) -> Optional[str]:
         """获取下次运行时间"""
@@ -171,7 +181,7 @@ class IntelScheduler:
         result = []
 
         for name, scfg in sources.items():
-            status_info = _job_status.get(name, {})
+            status_info = self.get_job_status(name)
             next_run = self.get_next_run(name)
             result.append({
                 "source":      name,
@@ -200,7 +210,7 @@ class IntelScheduler:
                 month=month, day_of_week=day_of_week,
             )
             job = self.scheduler.add_job(
-                func=_run_source_update,
+                func=_scheduler_enqueue,
                 trigger=trigger,
                 args=[source_name],
                 id=source_name,

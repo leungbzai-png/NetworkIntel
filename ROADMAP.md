@@ -2,7 +2,16 @@
 
 > 语义化版本，轻量路线，可能随实际情况调整。当前进度见 [`PROJECT_STATUS.md`](PROJECT_STATUS.md)。
 
-## 当前公开版本：**v0.2.0**（Portable Runtime + 首次初始化向导）
+## 当前公开版本：**v0.3.0**（串行化 SQLite 更新队列）
+
+v0.3.0 已包含（主题：SQLite 写入串行化 / 数据源更新队列稳定性）：
+- **统一更新协调器**（`python/update_coordinator.py`）：进程内单 worker 写入队列，GUI 手动/全部更新、
+  调度器、CLI、首次初始化向导统一入队；同源去重、失败隔离、清晰状态机。
+- **连接策略统一**：`busy_timeout=30000` + `foreign_keys=ON` + WAL（优雅回退）；读/写连接分离。
+- **事务原子化**：每源一次刷新 = 一个 `BEGIN IMMEDIATE` 事务，`DELETE+INSERT` 同事务，失败整体回滚。
+- **锁错误分类 + 有限重试 + 脱敏**：`database is locked` 单独识别，绝不无限重试，不泄露 key。
+- 不变量：未改 `query_ip`、未改表结构、未换 SQLite、未新增 Provider、未做 UI 重构。测试 165/165。
+- 详见 [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md) 与 [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)。
 
 v0.2.0 已包含：
 - **Phase 1**：统一 `paths` 模块、任意目录运行、首次运行自动建目录/模板、GUI key 设置、portable/custom 数据目录模式。
@@ -23,7 +32,7 @@ v0.1.0 已包含（首个公开版本一次性纳入的工程化主体）：
 | 版本 | 主题 | 内容（简） |
 |---|---|---|
 | **v0.2.0**（已发布） | Portable Runtime + First Run Setup | 统一 `paths`；任意目录运行；首次运行自动建目录/模板；GUI key 设置；portable/custom 数据目录；首次初始化向导 + 数据源选择串行下载（最小/推荐/完整/自定义）+ 发布包。 |
-| **v0.3.0** | SQLite 写入串行化 / 更新队列稳定性 | 按 `docs/SQLITE_CONCURRENCY_TODO.md`：busy_timeout → 写锁或 writer queue → 事务原子化 → 错误分类 → 压测 |
+| **v0.3.0**（已发布） | SQLite 写入串行化 / 更新队列稳定性 | 统一更新协调器（单 worker 写入队列）+ busy_timeout/WAL/foreign_keys 连接策略 + 事务原子化 + 锁错误分类/脱敏；GUI/调度器/CLI/首次初始化统一入队 |
 | **v0.4.0** | 可选 online enrichment 接入 GUI | 独立 `enrich()` 模块，离线结果可选并入在线字段；可关闭；**不改 `query_ip` 内部** |
 | **v0.5.0** | Provider 状态页 | Provider 状态 / 缓存与限速状态展示；响应性与错误提示优化 |
 | **v1.0.0** | 稳定版 | 离线主路径稳定；在线增强可选可关；并发写安全；文档完备 |

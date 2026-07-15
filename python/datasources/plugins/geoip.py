@@ -144,14 +144,8 @@ class GeoIPSource(DataSourceBase):
             "source", "snapshot_date",
         ]
         count = 0
-        # 先清空旧数据
-        from utils.schema import get_connection
-        conn = get_connection(self.config.db_path)
-        conn.execute("DELETE FROM geoip WHERE source = ?", (self.SOURCE_NAME,))
-        conn.commit()
-        conn.close()
-
-        with self._bulk_insert("geoip", columns) as insert:
+        # 删旧 + 插新在同一事务内原子完成（replace_source=True），失败整体回滚。
+        with self._bulk_insert("geoip", columns, replace_source=True) as insert:
             for rec in records:
                 insert(rec)
                 count += 1

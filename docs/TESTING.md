@@ -33,6 +33,11 @@ D:\Python\python.exe tests/run_tests.py
 | `test_provider_cache.py` | online_cache set/get；过期不命中；purge_expired；stats；upsert（临时库+可控时钟） |
 | `test_provider_ratelimit.py` | 限额生效与窗口恢复；per_day 边界；provider 额度独立；429 冷却/Retry-After；**连续 429 熔断**；record_success 清零 consecutive_429；record_failure 不熔断；reset；`build_default_limiter` abuseipdb per_day=900（临时 JSON+可控时钟） |
 | `test_online_runner.py` | 缓存命中不回源/不消耗额度；force_refresh 绕过缓存但仍受限速；use_cache=False；缺 key 优雅；不允许的 provider；限速/熔断时不调用 query 并返回统一失败；abuseipdb 在默认允许列表 |
+| `test_sqlite_connection_policy.py` | **（v0.3.0）** `busy_timeout` 生效（读/写连接、env 覆盖动态生效）；`foreign_keys=ON`；WAL 或优雅回退；写连接 `isolation_level=None` 可显式 `BEGIN IMMEDIATE`；`is_locked_error` 分类；每线程独立连接并发只读无错 |
+| `test_update_coordinator.py` | **（v0.3.0）** 状态时序 queued→running→success；失败/执行器异常→failed + error_type；同源活动中重复入队→skipped(duplicate)；完成后可再次入队；`is_busy`/`queue_size`；`get_source_state`；`shutdown` 不挂死且拒绝新任务；`wait_for_job` 超时；错误消息脱敏 + `redact_secrets` 单元 |
+| `test_update_queue_concurrency.py` | **（v0.3.0）** 多线程同时入队时最大并行执行数恒为 1（峰值计数器）；两次「全部更新」不并行（同源去重）；单源失败后续源继续 |
+| `test_update_transactions.py` | **（v0.3.0）** 成功 commit 持久化；中途异常 rollback 保留旧数据；`replace_source` 原子替换；busy_timeout 等待后成功；锁重试有限耗尽抛 locked（不死锁）；完整 `update()` 分类 `db_locked` 且旧数据不损 |
+| `test_scheduler_update_coordination.py` | **（v0.3.0）** 手动与调度器同源去重；手动+调度器混合触发写库串行（峰值 1）；调度器任务失败不断队；`get_job_status` 状态映射旧词表；`_scheduler_enqueue` 吞异常不杀调度线程 |
 
 ## 3. 网络策略
 
@@ -48,5 +53,8 @@ D:\Python\python.exe tests/run_tests.py
 ## 5. 当前结果
 
 ```
-126/126 passed, 0 failed
+165/165 passed, 0 failed   （v0.3.0；run_tests.py 与 pytest 等价）
 ```
+
+> 并发相关测试全部**确定性**：用事件 / Barrier（仅入队侧）/ 峰值计数器 / 临时 SQLite 文件与竞争写锁，
+> 不依赖随机 sleep 制造偶现结果。所有测试零网络、零真实 key、临时目录与临时数据库，绝不触碰正式 `live/intel.db`。

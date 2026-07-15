@@ -17,6 +17,7 @@ NetworkIntel - DataSource 插件基类
 """
 
 import os
+import time
 import shutil
 import hashlib
 import requests
@@ -29,7 +30,10 @@ from contextlib import contextmanager
 
 from utils.logger import get_logger
 from utils.config_loader import get_config
-from utils.schema import get_connection
+from utils.redaction import redact_secrets
+from utils.schema import (
+    connect_write, is_locked_error, lock_retries, lock_backoff_s,
+)
 
 
 class DataSourceBase(ABC):
@@ -122,7 +126,8 @@ class DataSourceBase(ABC):
         返回：{ success, record_count, error, duration_seconds }
         """
         start = datetime.now()
-        result = {"success": False, "record_count": 0, "error": None}
+        result = {"success": False, "record_count": 0, "error": None,
+                  "error_type": None}
 
         def _cb(step, pct):
             if progress_callback:
@@ -151,9 +156,28 @@ class DataSourceBase(ABC):
             _cb("完成", 100)
 
         except Exception as e:
-            self.logger.error(f"[{self.SOURCE_NAME}] 更新失败: {e}", exc_info=True)
-            result["error"] = str(e)
-            self._update_meta(status="error", error=str(e))
+            # 锁冲突单独识别（与网络/解析错误区分），便于排查 database is locked。
+            error_type = "db_locked" if is_locked_error(e) else type(e).__name__
+            # 脱敏：异常消息可能带含 key 的下载 URL（如 MaxMind license_key）。
+            safe_msg = redact_secrets(str(e))
+            result["error_type"] = error_type
+            result["error"] = safe_msg
+            result["duration_seconds"] = (datetime.now() - start).total_seconds()
+            import traceback
+            safe_tb = redact_secrets(traceback.format_exc())
+            if error_type == "db_locked":
+                self.logger.error(
+                    f"[{self.SOURCE_NAME}] 写库锁冲突（database is locked），"
+                    f"busy_timeout/重试耗尽: {safe_msg}\n{safe_tb}")
+            else:
+                self.logger.error(
+                    f"[{self.SOURCE_NAME}] 更新失败: {safe_msg}\n{safe_tb}")
+            # 写状态本身也可能撞锁：吞掉其异常，保证 update() 返回结果、不二次崩溃。
+            try:
+                self._update_meta(status="error", error=safe_msg)
+            except Exception as meta_e:
+                self.logger.error(
+                    f"[{self.SOURCE_NAME}] 写 source_meta 失败: {redact_secrets(str(meta_e))}")
 
         return result
 
@@ -172,11 +196,43 @@ class DataSourceBase(ABC):
                     f.write(chunk)
         return dest
 
+    def _begin_immediate(self, db_path: str):
+        """
+        获取一个已进入 `BEGIN IMMEDIATE`（持有写锁）的 autocommit 写连接。
+        锁冲突（database is locked/busy）时按有限次数退避重试；耗尽后抛出原异常。
+        成功返回时连接已持有写锁——后续 executemany 不再与其它写者竞争，
+        因此可以安全地在事务内消费一次性生成器，无需重放。
+        """
+        retries = lock_retries()
+        backoff = lock_backoff_s()
+        last_exc: Optional[BaseException] = None
+        for attempt in range(retries + 1):
+            conn = connect_write(db_path)
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                return conn
+            except sqlite3.OperationalError as e:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                last_exc = e
+                if is_locked_error(e) and attempt < retries:
+                    self.logger.warning(
+                        f"[{self.SOURCE_NAME}] 写锁繁忙，退避重试 "
+                        f"{attempt + 1}/{retries}: {e}")
+                    time.sleep(backoff * (attempt + 1))
+                    continue
+                raise
+        # 理论不可达（最后一次要么 return 要么 raise），保底：
+        raise last_exc  # pragma: no cover
+
     def _update_meta(self, status: str, record_count: int = 0,
                      error: Optional[str] = None) -> None:
-        """更新 source_meta 表中本数据源的状态"""
+        """更新 source_meta 表中本数据源的状态（单条 upsert，带锁重试）。"""
         now = datetime.now().isoformat()
-        with get_connection(self.config.db_path) as conn:
+        conn = self._begin_immediate(self.config.db_path)
+        try:
             conn.execute("""
                 INSERT INTO source_meta
                     (source, description, last_updated, status, record_count,
@@ -202,36 +258,61 @@ class DataSourceBase(ABC):
                 self.snapshot_category,
                 now,
             ))
-            conn.commit()
+            conn.execute("COMMIT")
+        except BaseException:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            raise
+        finally:
+            conn.close()
 
     @contextmanager
-    def _bulk_insert(self, table: str, columns: list):
+    def _bulk_insert(self, table: str, columns: list,
+                     replace_source: bool = False, batch_size: int = 5000):
         """
-        批量插入上下文管理器
+        原子批量插入上下文管理器（v0.3.0：单连接、单事务）。
+
         用法：
-            with self._bulk_insert('threat_intel', ['col1','col2']) as insert:
-                insert({'col1': 'v1', 'col2': 'v2'})
+            with self._bulk_insert('threat_intel', cols, replace_source=True) as insert:
+                for rec in records:
+                    insert(rec)
+
+        约定：
+          * __enter__ 先取写锁（BEGIN IMMEDIATE，带锁重试），再（可选）
+            `DELETE FROM <table> WHERE source=SELF`，使「删旧 + 插新」处于
+            **同一事务**，中途失败整体 ROLLBACK，杜绝「删了旧的、只写一半」的空窗。
+          * 批次内 executemany 累积进事务、**不逐批 commit**，退出时一次性 COMMIT，
+            兼顾原子性与批量性能（避免逐行/逐批 commit）。
+          * 下载与解析在事务外完成，写锁只在真正落库期间持有。
         """
-        conn = get_connection(self.config.db_path)
+        conn = self._begin_immediate(self.config.db_path)
         placeholders = ",".join("?" * len(columns))
         sql = f"INSERT OR REPLACE INTO {table} ({','.join(columns)}) VALUES ({placeholders})"
-        batch = []
-        count = [0]
+        batch: list = []
 
         def insert(record: dict):
             row = [record.get(c) for c in columns]
             batch.append(row)
-            count[0] += 1
-            if len(batch) >= 5000:
+            if len(batch) >= batch_size:
                 conn.executemany(sql, batch)
-                conn.commit()
                 batch.clear()
 
         try:
+            if replace_source:
+                conn.execute(f"DELETE FROM {table} WHERE source = ?",
+                             (self.SOURCE_NAME,))
             yield insert
             if batch:
                 conn.executemany(sql, batch)
-                conn.commit()
+            conn.execute("COMMIT")
+        except BaseException:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            raise
         finally:
             conn.close()
 

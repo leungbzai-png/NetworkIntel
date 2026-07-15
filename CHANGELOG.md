@@ -5,6 +5,56 @@
 
 ---
 
+## [0.3.0] - 2026-07-15 — 串行化 SQLite 更新队列 / 数据源更新稳定性
+
+主题严格限定为 **SQLite 写入串行化 / 数据源更新队列稳定性**。
+**不含** UI 重构、新 Provider、数据库 schema 大改造；不改 `query_ip` 只读离线路径；不换 SQLite。
+详见 [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md)。
+
+### 新增
+- **统一更新协调器** `python/update_coordinator.py`：单消费线程串行化所有数据源写库，
+  同一进程内任一时刻最多一个源在写库。含 `UpdateCoordinator` / `UpdateJob` / `UpdateResult` /
+  `UpdateState`，接口 `enqueue_source` / `enqueue_many` / `is_busy` / `queue_size` /
+  `get_source_state` / `wait_for_job` / `shutdown`，全局单例 `get_coordinator()`。
+  相同源已 queued/running 时重复触发返回 `skipped(duplicate)`；单源失败不终止队列；daemon worker 不阻塞退出。
+- **敏感值脱敏** `python/utils/redaction.py`：异常/日志/GUI 文案中的 `license_key` / `token` /
+  `api_key` / `Authorization` 等替换为 `***`（修复失败下载 URL 可能带出 MaxMind key 的泄露面）。
+
+### 变更
+- **连接策略统一**（`utils/schema.py`）：新增 `connect_read` / `connect_write` 工厂，统一
+  `busy_timeout=30000`、`foreign_keys=ON`、WAL（失败优雅回退 + 告警）、`synchronous=NORMAL`；
+  写连接 `isolation_level=None`（autocommit）以显式 `BEGIN IMMEDIATE`；`get_connection` 保留为只读别名。
+  `schema_v6` 建表与在线缓存连接同步加 `busy_timeout`。
+- **事务原子化**（`datasources/base.py` + 7 个插件 `load()`）：`_bulk_insert` 改为单连接单事务，
+  `__enter__` 取写锁（带有限退避重试）后在**同一事务**内 `DELETE old + INSERT new`，
+  退出时一次性 COMMIT / 异常整体 ROLLBACK；杜绝「删旧插一半」空窗。插件 `load()` 改用
+  `replace_source=True`（download/parse/load 签名不变）。修复 `_update_meta` 连接泄漏。
+- **锁错误分类**：`update()` 单独识别 `database is locked`（`error_type=db_locked`），
+  日志与普通网络/解析错误区分，并记录脱敏 traceback。
+- **调度器改造**（`scheduler/scheduler.py`）：`trigger_now` / `trigger_all` / cron 任务全部委派协调器，
+  不再自起写库线程；`get_job_status` 数据源改为协调器；`stop()` 有序关闭协调器。
+- **CLI**（`do_update.py`）：走协调器串行队列，按序输出每源状态 + 汇总；仅失败时返回非零码；
+  缺 MaxMind Key 的 `geoip` 标记 `skipped`。
+- **首次初始化向导**：`setup_profiles.download_sources` 的默认执行器改为投递协调器，
+  与 GUI/调度器/CLI 共用同一写库实现。
+- **GUI**（`main_gui.py`）：「全部更新」进行中禁用按钮 / 提示「更新任务正在执行」，
+  显示当前源、完成数/总数与成功/失败/跳过汇总；新增 `queued` / `skipped` 状态色；
+  v0.2.1 的 `SourcesPage` 容错逻辑保持不退化。
+
+### 测试
+- 新增 `test_update_coordinator` / `test_update_queue_concurrency` /
+  `test_sqlite_connection_policy` / `test_update_transactions` /
+  `test_scheduler_update_coordination`：最大并行度恒为 1、同源去重、两次「全部更新」不并行、
+  失败隔离、状态时序、busy_timeout 生效/WAL 回退、每线程独立连接、事务提交/中途回滚保留旧数据、
+  锁有限重试后失败（不死锁）、脱敏、队列 shutdown 不挂死。
+- 全量 **165 / 165 passed**（`run_tests.py` 与 `pytest` 等价），零网络、零真实 key、临时库隔离。
+
+### 版本
+- 项目发布版本 `0.3.0`（`VERSION` 与 `python/__init__.py` `__version__`）；GUI `APP_VERSION` 保持独立（1.2.0）。
+- 不重写 / 不删除 v0.1.0 / v0.2.0 / v0.2.1 的 tag、Release 或 asset；v0.3.0 作为 Latest 发布。
+
+---
+
 ## [0.2.1] - 2026-06-12 — Hotfix：数据源页面列表空白
 
 仅修复 portable 版「数据源」页面在初始化完成后列表可能整页空白的显示 bug。

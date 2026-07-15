@@ -378,8 +378,14 @@ def _save_history(conn: sqlite3.Connection, ip: str,
             VALUES (?, ?, ?, ?)
         """, (ip, query_type, json.dumps(summary), result.get("risk_level", "clean")))
         conn.commit()
-    except Exception:
-        pass  # 历史记录写失败不影响主流程
+    except Exception as e:
+        # 历史记录写失败不影响主流程；但不再静默——记 debug 便于排查，
+        # 并区分锁冲突（并发更新时该 INSERT 可能撞锁）与其它错误。
+        from utils.schema import is_locked_error
+        if is_locked_error(e):
+            logger.debug(f"[query_history] 写历史撞锁（database is locked），已跳过: {e}")
+        else:
+            logger.debug(f"[query_history] 写历史失败，已跳过: {e}")
 
 
 

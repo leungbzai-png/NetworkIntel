@@ -1,7 +1,11 @@
 # NetworkIntel 本地离线IP情报平台
 
-> **公开版本：v0.2.0**
+> **公开版本：v0.3.0**
 > 离线查IP，全可视化界面，Windows原生部署，无需Docker
+>
+> 🔒 **v0.3.0：串行化 SQLite 更新队列**——统一更新协调器（进程内单写者队列）根治
+> GUI「全部更新」/ 调度撞点的 `database is locked`；连接统一 `busy_timeout` + WAL；每源刷新单事务原子化。
+> 详见 [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md)。
 
 > 🧳 **任意目录运行（Portable）**：不再锁定 `E:\NetworkIntel`，解压到任意文件夹即可运行；
 > 首次运行自动创建目录与配置模板；可在 GUI 设置页填写 key 并选择数据目录模式。
@@ -361,15 +365,15 @@ E:\NetworkIntel\python\dist\NetworkIntel.exe
 **注意**：PyInstaller 打包的 exe 可能被杀毒软件（360、火绒等）误报。
 解决方法：将 `dist\` 目录加入杀毒软件白名单/信任区。
 
-### Portable 发布包（v0.2.0）
+### Portable 发布包（v0.3.0）
 
-v0.2.0 **只发布 portable zip，不发布裸 exe**：`package_portable.bat` 构建 GUI exe 并打包成
-`NetworkIntel-v0.2.0-windows-x64-portable.zip`（顶层目录 `NetworkIntel-v0.2.0-windows-x64-portable\`）。
+**只发布 portable zip，不发布裸 exe**：`package_portable.bat` 构建 GUI exe 并打包成
+`NetworkIntel-v0.3.0-windows-x64-portable.zip`（顶层目录 `NetworkIntel-v0.3.0-windows-x64-portable\`）。
 
 - zip **不内置数据库与 key**，也不含 `.env` / `configs/sources.yaml`；只随包 `*.example.*` 模板
   与 `README.md` / `RUNNING.txt` / 关键文档。首次运行需用户**自行选择数据源**初始化（见 `RUNNING.txt`）。
 - **包体积约 220MB**：由 PySide6 + QtWebEngine 的 PyInstaller onefile 打包导致（内嵌 Chromium），本阶段暂不瘦身。
-- 详见 [`docs/RELEASE_NOTES_v0.2.0.md`](docs/RELEASE_NOTES_v0.2.0.md)。
+- 详见 [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md)。
 
 ---
 
@@ -473,9 +477,10 @@ A: 在 F2 批量页查询后，关闭浏览器弹出的报告即可。报告文�
 | `python python/main.py` | 直接运行主程序（TUI/CLI 入口） |
 | `python python/main_gui.py` | 直接运行 PySide6 图形界面 |
 
-> CLI 更新（`update.bat` → `do_update.py`）**串行**执行各数据源，单写者，安全。
-> GUI/调度器的「全部更新」为并发触发，写库并发性请参阅
-> [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)。
+> **v0.3.0 起**：GUI 单源/全部更新、调度器、CLI（`update.bat` → `do_update.py`）、首次初始化向导
+> 全部经**统一更新协调器**入队执行——进程内单写者、同源去重、失败隔离，从根本上消除并发写
+> `database is locked`。写库并发设计见 [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md)
+> 与 [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)。
 
 ---
 
@@ -540,24 +545,25 @@ key 经请求头/params 发送，**绝不进入** URL / 日志 / 异常 / 缓存
 
 ---
 
-## 已知限制（v0.2.0）
+## 已知限制（v0.3.0）
 
 - **数据库不随源码/发布包发布**：首次使用需联网下载（之后查询全程离线）。推荐用 GUI 的
-  **数据初始化向导**（「数据源」页 →「数据初始化…」），或命令行 `update.bat`（串行更新）。
+  **数据初始化向导**（「数据源」页 →「数据初始化…」），或命令行 `update.bat`。
 - **API key 需用户自行配置**：在线 Provider（ipinfo / ip2location / AbuseIPDB）需在 `.env` 填入各自 key；
   离线查询本身不需要任何在线 key（仅 GeoIP 下载需 MaxMind Key）。
-- **SQLite 并发写入风险已审计但尚未修复**：GUI/调度器「全部更新」会并发写库，可能偶发
-  `database is locked`（随机源 status=error）。**规避：用数据初始化向导（串行下载）或 `update.bat`（串行更新）**。
-  并发串行化修复列入 v0.3.0。详见 [`docs/SQLITE_CONCURRENCY_AUDIT.md`](docs/SQLITE_CONCURRENCY_AUDIT.md)。
+- **~~SQLite 并发写入风险~~已在 v0.3.0 修复**：GUI/调度器/CLI/首次初始化统一走更新协调器（进程内单写者队列），
+  进程内并发写 `database is locked` 已根治。仅剩**跨进程**边界（同时运行 GUI 与 `update.bat` 更新大源）
+  由 busy_timeout + 事务 + 有限重试兜底，极端情况会安全失败并可重跑——建议不要同时跑两个更新进程。
+  详见 [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md)。
 - **在线 Provider 不接入 `query_ip` 主流程**：在线能力仅旁路，离线主查询不依赖任何外部网络。
 
 ---
 
 ## 后续路线
 
-当前公开版本 **v0.2.0**。后续规划（轻量、可能调整，见 [`ROADMAP.md`](ROADMAP.md)）：
+当前公开版本 **v0.3.0**。后续规划（轻量、可能调整，见 [`ROADMAP.md`](ROADMAP.md)）：
 
-- **v0.3.0** SQLite 写入串行化（busy_timeout → 写锁或 writer queue → 事务原子化）
+- ✅ **v0.3.0** SQLite 写入串行化（统一更新协调器 + busy_timeout/WAL + 事务原子化 + 锁分类/脱敏）——已发布
 - **v0.4.0** 可选 online enrichment（独立 `enrich()`，可关闭，不改 `query_ip`）
 - **v0.5.0** GUI 状态页：Provider 状态 / 缓存与限速状态展示
 - **v1.0.0** 稳定版
@@ -595,4 +601,4 @@ python scripts/provider_smoke_test.py --rate-limit-status
 
 ---
 
-*NetworkIntel v0.2.0 · 数据仅供参考，不构成任何安全建议*
+*NetworkIntel v0.3.0 · 数据仅供参考，不构成任何安全建议*

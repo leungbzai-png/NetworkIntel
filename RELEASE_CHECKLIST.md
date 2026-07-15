@@ -2,8 +2,8 @@
 
 > 每次发布/打 tag 前逐项确认。任一项不通过则**不发布**。
 
-> **v0.2.0 为正式发布**（Phase 1 Portable Runtime + Phase 2 首次初始化向导 / 数据源选择串行下载 / 打包 Release zip）。
-> 发布须逐项通过本清单；**不覆盖 v0.1.0 tag、不改仓库可见性**。
+> **v0.3.0 为正式发布**（串行化 SQLite 更新队列：统一更新协调器 + busy_timeout/WAL + 事务原子化 + 锁分类/脱敏）。
+> 发布须逐项通过本清单；**不覆盖 v0.1.0 / v0.2.0 / v0.2.1 的 tag 与 asset、不改仓库可见性**。
 
 ## A. 密钥与隐私
 - [ ] **无真实 key/token**：`git diff` 与 `git ls-files` 中不含真实密钥
@@ -17,8 +17,8 @@
 - [ ] 仓库体积合理（无意外的二进制/数据大文件混入）。
 
 ## C. 测试
-- [ ] `python tests/run_tests.py` → **126/126 passed, 0 failed**（或随版本递增后的全绿）。
-- [ ] 测试默认**零网络**、输出**无真实 key**。
+- [ ] `python tests/run_tests.py` → **165/165 passed, 0 failed**（或随版本递增后的全绿）；`python -m pytest` 等价全绿。
+- [ ] 测试默认**零网络**、输出**无真实 key**、临时库隔离（不触碰正式 `live/intel.db`）。
 
 ## D. 入口可运行
 - [ ] `update.bat` import 测试通过：`cd python && python -c "import do_update"` 无报错（离线 CLI 入口完好）。
@@ -29,7 +29,7 @@
 - [ ] `README.md` / `DEVELOPMENT.md` / `ROADMAP.md` / `PROJECT_STATUS.md` 与本次变更一致。
 - [ ] `CHANGELOG.md` 记录了本次发布内容。
 - [ ] `docs/*` 中受影响的文档（在线 Provider / 缓存限速 / SQLite 审计 / 测试）已更新。
-- [ ] `docs/RELEASE_NOTES_v0.2.0.md` 存在且与本次发布内容一致（独立于 CHANGELOG 段落）。
+- [ ] `docs/RELEASE_NOTES_v0.3.0.md` 存在且与本次发布内容一致（独立于 CHANGELOG 段落）。
 
 ## F. Git 卫生
 - [ ] `git status` **干净**（无未跟踪的敏感文件、无遗留改动）。
@@ -37,9 +37,9 @@
 - [ ] 在正确分支上（功能不直接堆在 `main` 上，除非有意发布）。
 
 ## G. 已知风险确认
-- [ ] 若本次涉及更高并发：确认 **SQLite 写入串行化（v0.3.0）** 是否需先落地
-      （见 `docs/SQLITE_CONCURRENCY_AUDIT.md`）。v0.2.0 首次初始化向导已串行下载；但在发布说明中仍标注
-      「GUI『全部更新』存在并发写风险，建议改用数据初始化向导或 `update.bat`」。
+- [x] **SQLite 写入串行化已在 v0.3.0 落地**（统一更新协调器单写者队列 + busy_timeout/WAL + 事务原子化）。
+      进程内「全部更新 / 调度撞点」并发写已根治；跨进程（GUI 与 `update.bat` 同跑）边界见
+      `docs/RELEASE_NOTES_v0.3.0.md`「已知边界」。
 
 ---
 
